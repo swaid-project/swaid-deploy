@@ -65,6 +65,29 @@ class ResonanceClient:
         }
         return self.send_request(payload)
 
+    def manual_audio(self, channel, freq, amp, phase):
+        """Sends a manual audio command to a specific channel."""
+        payload = {
+            "message_type": "manual_audio",
+            "command": {
+                "channel": channel,
+                "frequency_hz": freq,
+                "amplitude": amp,
+                "phase_deg": phase
+            }
+        }
+        return self.send_request(payload)
+
+    def manual_led(self, led_effect):
+        """Sends a manual LED effect command."""
+        payload = {
+            "message_type": "manual_led",
+            "command": {
+                "led_effect": led_effect
+            }
+        }
+        return self.send_request(payload)
+
 if __name__ == "__main__":
     # Example usage / Heartbeat simulation
     client = ResonanceClient()
