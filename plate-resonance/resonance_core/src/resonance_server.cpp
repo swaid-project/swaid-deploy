@@ -139,12 +139,20 @@ void jsonListenerThread() {
             int music_note = message["music_note"].get<int>();
             int led_effect = message["led_effect_id"].get<int>();
 
-            std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect << "\n";
+            // Parse optional volume parameters (standardized to vol_l and vol_r, 0-100)
+            int vol_l = 100;
+            int vol_r = 100;
+
+            if (message.contains("vol_l")) vol_l = message["vol_l"].get<int>();
+            if (message.contains("vol_r")) vol_r = message["vol_r"].get<int>();
+
+            std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect 
+                      << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
 
             // ASYNC DISPATCH
             pdSender.sendNote(music_note);
             ledDriver.sendEffect(led_effect);
-            applyPattern(catalogue, chladni_id, "MEDIUM");
+            applyPattern(catalogue, chladni_id, "MEDIUM", vol_l, vol_r);
 
             rep_socket.send(zmq::str_buffer("{\"status\": \"ok\"}"), zmq::send_flags::none);
         } 

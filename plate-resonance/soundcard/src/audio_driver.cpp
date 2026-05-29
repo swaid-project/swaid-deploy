@@ -11,7 +11,7 @@ int fadeDurationMs(const std::string& t) {
 }
 
 // --- Sending the pattern to the soundcard generators
-void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition) {
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition, int vol_l, int vol_r) {
 
     auto it = catalogue.find(symbol_id);
 
@@ -28,6 +28,10 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
     for (int i = 0; i < NUM_GENERATORS; i++)
         fromAmps[i] = generators[i].amp.load();
  
+    // Convert 0-100 integers to 0.0-1.0 multipliers
+    float normL = std::clamp(vol_l, 0, 100) / 100.0f;
+    float normR = std::clamp(vol_r, 0, 100) / 100.0f;
+
     if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
         for (const auto& t : pattern["hardware_config"]["channels"]) {
             int idx = t["channel"].get<int>() - 1;
@@ -35,12 +39,24 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
             if (idx < 0 || idx >= NUM_GENERATORS) 
                 continue;
 
+            float baseAmp = t["amplitude"].get<float>();
+            float multiplier = 1.0f;
+
+            // Apply L/R multipliers based on standard 7.1/5.1 layout indices
+            if (idx == 0 || idx == 4 || idx == 6) multiplier = normL;
+            else if (idx == 1 || idx == 5 || idx == 7) multiplier = normR;
+            else multiplier = (normL + normR) / 2.0f; // Center and Sub get average
+
+            float targetAmp = baseAmp * multiplier;
+
             generators[idx].freq.store(     t["frequency_hz"].get<float>());
-            generators[idx].amp.store(      t["amplitude"].get<float>()   );
+            // Note: We don't store to amp directly here, we let the fade handle it
+            // but we update the toAmps target.
+            
             if (t.contains("phase_deg"))
                 generators[idx].phaseDeg.store( t["phase_deg"].get<float>()   );
             
-            toAmps[idx] = t["amplitude"].get<float>();
+            toAmps[idx] = targetAmp;
         }
     }
 
