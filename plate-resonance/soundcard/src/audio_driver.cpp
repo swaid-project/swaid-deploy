@@ -11,7 +11,7 @@ int fadeDurationMs(const std::string& t) {
 }
 
 // --- Sending the pattern to the soundcard generators
-void applyPattern(const std::map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition) {
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition) {
 
     auto it = catalogue.find(symbol_id);
 
@@ -28,16 +28,20 @@ void applyPattern(const std::map<std::string, json>& catalogue, const std::strin
     for (int i = 0; i < NUM_GENERATORS; i++)
         fromAmps[i] = generators[i].amp.load();
  
-    for (const auto& t : pattern["hardware_config"]["transducers"]) {
-        int idx = t["channel"].get<int>() - 1;
+    if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
+        for (const auto& t : pattern["hardware_config"]["channels"]) {
+            int idx = t["channel"].get<int>() - 1;
 
-        if (idx < 0 || idx >= NUM_GENERATORS) 
-            continue;
+            if (idx < 0 || idx >= NUM_GENERATORS) 
+                continue;
 
-        generators[idx].freq.store(     t["frequency_hz"].get<float>());
-        generators[idx].amp.store(      t["amplitude"].get<float>()   );
-      //generators[idx].phaseDeg.store( t["phase_deg"].get<float>()   );
-        toAmps[idx] = t["amplitude"].get<float>();
+            generators[idx].freq.store(     t["frequency_hz"].get<float>());
+            generators[idx].amp.store(      t["amplitude"].get<float>()   );
+            if (t.contains("phase_deg"))
+                generators[idx].phaseDeg.store( t["phase_deg"].get<float>()   );
+            
+            toAmps[idx] = t["amplitude"].get<float>();
+        }
     }
 
     int duration = fadeDurationMs(fade_transition);
@@ -146,6 +150,7 @@ int selectAudioDevice() {
                       << " (out: " << info->maxOutputChannels << "ch)\n";
     }
     std::cout << "Select device index: ";
-    int choice; std::cin >> choice;
+    int choice; 
+    if (!(std::cin >> choice)) return 0;
     return choice;
 }

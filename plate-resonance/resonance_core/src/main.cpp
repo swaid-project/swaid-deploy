@@ -1,4 +1,4 @@
-#include "../include/core.hpp"
+#include "../include/resonance_server.hpp"
 #include "../../soundcard/include/audio_driver.hpp"
 #include "../../led_driver/include/embedded_sal.hpp"
 #include "../../soundcard/include/audio_driver.hpp"

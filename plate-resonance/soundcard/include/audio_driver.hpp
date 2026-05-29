@@ -50,8 +50,9 @@ extern const int FRAMES_PER_BUFFER;
 // --- Duration for the amplitude for fade
 int fadeDurationMs(const std::string& t);
 
+#include <unordered_map>
 // --- Sending the pattern to the soundcard generators
-void applyPattern(const std::map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition);
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition);
 
 // --- Helper function to reset all generators
 void resetGenerators();
