@@ -975,7 +975,6 @@ class CameraSettingsDialog(QDialog):
             self.tracking_camera_combo.addItem(label, source)
             self.center_camera_combo.addItem(label, source)
 
-        self.center_mode_combo.addItem("Símbolo Chladni", "symbol")
         self.center_mode_combo.addItem("Live footage", "live")
 
         self.tracking_camera_combo.setCurrentIndex(
@@ -984,7 +983,7 @@ class CameraSettingsDialog(QDialog):
         self.center_camera_combo.setCurrentIndex(
             self.index_for_camera(self.center_camera_combo, center_camera)
         )
-        self.center_mode_combo.setCurrentIndex(1 if center_mode == "live" else 0)
+        self.center_mode_combo.setCurrentIndex(0)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -1164,7 +1163,7 @@ def main():
 
     state = {
         "tracking_camera": initial_camera,
-        "center_mode": "symbol",
+    "center_mode": "live",
         "center_camera": initial_camera,
         "tracker": None,
         "center_feed": None,
@@ -1234,13 +1233,11 @@ def main():
         if values["tracking_camera"] != state["tracking_camera"]:
             start_tracking(values["tracking_camera"])
 
-        if values["center_mode"] == "live":
-            start_center_feed(values["center_camera"])
-        else:
-            use_center_symbol()
+        start_center_feed(values["center_camera"])
 
     window.settings_requested.connect(open_camera_settings)
     start_tracking(state["tracking_camera"])
+    start_center_feed(state["center_camera"])
 
     exit_code = app.exec()
     stop_thread(state["tracker"])
