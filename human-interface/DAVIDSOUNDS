@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""
+DAVIDSOUNDS — parse Interface.py terminal output and drive puredata.
+
+Reads stdin line by line.  For every line matching the simulated/real
+trigger log, e.g.:
+
+    [ResonanceClient sim] trigger_symbol('CHLADNI_655', note=5, led=5, L=100, R=100)
+
+it extracts the note value and runs:
+
+    ./puredat "<note>"
+
+Usage:
+    python3 main.py | ./DAVIDSOUNDS
+    # or
+    ./DAVIDSOUNDS < some_log.txt
+"""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# Matches: trigger_symbol('CHLADNI_655', note=5, led=5, L=100, R=100)
+# Captures the integer after note=
+_NOTE_RE = re.compile(r"trigger_symbol\([^)]*\bnote=(\d+)")
+
+# puredat lives next to this script
+_PUREDAT = Path(__file__).parent / "puredat"
+
+
+def play(note: str) -> None:
+    cmd = [str(_PUREDAT), note]
+    print(f"[DAVIDSOUNDS] dispatch → {_PUREDAT.name} {note}", flush=True)
+    try:
+        subprocess.run(cmd, check=False)
+    except FileNotFoundError:
+        print(f"[DAVIDSOUNDS] ERROR: {_PUREDAT} not found", file=sys.stderr, flush=True)
+    except Exception as exc:
+        print(f"[DAVIDSOUNDS] ERROR running puredat: {exc}", file=sys.stderr, flush=True)
+
+
+def main() -> int:
+    print("[DAVIDSOUNDS] listening on stdin for trigger_symbol lines…", flush=True)
+    for line in sys.stdin:
+        match = _NOTE_RE.search(line)
+        if match:
+            play(match.group(1))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
