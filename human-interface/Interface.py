@@ -5,7 +5,7 @@ Sections
 --------
 1. Imports & Framework Setup
 2. Configuration & Constants
-3. Resonance SDK Native Bindings
+3. ResonanceClient Integration (replaces raw ctypes)
 4. State Management & Timers
 5. UI Layout & Event Routines
 """
@@ -14,18 +14,34 @@ Sections
 # 1. IMPORTS & FRAMEWORK SETUP
 # ===========================================================================
 
-import ctypes
+import json
 import math
+import os
 import sys
+import threading
 import time
 from pathlib import Path
 
 import numpy as np
-from PIL import Image                          # robust asset loading (PNG/TIFF/etc.)
-from PySide6.QtCore  import QPointF, QRectF, Qt, QTimer, Signal
+from PIL import Image
+from PySide6.QtCore  import QPointF, QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui   import (QColor, QFont, QImage, QPainter, QPainterPath,
                               QPen, QPixmap, QRadialGradient)
 from PySide6.QtWidgets import QApplication, QWidget
+
+# Add resonance_sdk to the Python path so ResonanceClient can be imported
+# regardless of the working directory the app is launched from.
+_SDK_DIR = Path(__file__).parent.parent / "plate-resonance" / "resonance_sdk"
+if str(_SDK_DIR) not in sys.path:
+    sys.path.insert(0, str(_SDK_DIR))
+
+try:
+    from resonance_client import ResonanceClient
+    _RESONANCE_CLIENT_AVAILABLE = True
+except ImportError as _rc_err:
+    print(f"[ResonanceClient] Import failed: {_rc_err} — simulated mode active.")
+    ResonanceClient             = None
+    _RESONANCE_CLIENT_AVAILABLE = False
 
 
 # ===========================================================================
@@ -33,21 +49,22 @@ from PySide6.QtWidgets import QApplication, QWidget
 # ===========================================================================
 
 # -- Asset paths -------------------------------------------------------------
-_ASSETS_DIR = Path(__file__).parent / "assets"
-_LOGO_FILE  = "FEUPLogo.png"          # PNG with alpha-channel support
+_ASSETS_DIR          = Path(__file__).parent / "assets"
+_LOGO_FILE           = "FEUPLogo.png"
+_MASTER_SYMBOLS_PATH = Path(__file__).parent.parent / "master_symbols.json"
 
-# -- Local IPC endpoint ------------------------------------------------------
-_ZMQ_ADDRESS = b"tcp://127.0.0.1:5555"
+# -- ResonanceClient endpoint ------------------------------------------------
+_RESONANCE_ENDPOINT = "ipc:///tmp/swaid.sock"
 
-# -- SDK volume defaults (sent with every hardware packet) -------------------
-_DEFAULT_LEFT_VOLUME  = 100.0   # Left_Volume  (0.0 – 100.0)
-_DEFAULT_RIGHT_VOLUME = 100.0   # Right_volume (0.0 – 100.0)
+# -- SDK volume defaults (0 – 100 integer scale) ----------------------------
+_DEFAULT_LEFT_VOLUME  = 100
+_DEFAULT_RIGHT_VOLUME = 100
 
-# -- Heartbeat / ping-pong (HI ↔ PR link monitoring) ------------------------
-_HEARTBEAT_INTERVAL_S     = 2   # seconds between pings
-_HEARTBEAT_MISS_THRESHOLD = 3   # consecutive misses before comm-failure warning
+# -- Heartbeat ---------------------------------------------------------------
+_HEARTBEAT_INTERVAL_S     = 2
+_HEARTBEAT_MISS_THRESHOLD = 3
 
-# -- Chromatic note map: label → Music_note integer 0-11 (C=0 … B=11) -------
+# -- Chromatic note map: label → music_note 0-11 (C=0 … B=11) ---------------
 NOTE_MAP: dict[str, int] = {
     "C": 0, "C#": 1, "D": 2,  "D#": 3,
     "E": 4, "F":  5, "F#": 6, "G":  7,
@@ -55,78 +72,89 @@ NOTE_MAP: dict[str, int] = {
 }
 
 # -- Idle / attract-cycle timing ---------------------------------------------
-_IDLE_TIMEOUT_S   = 5 * 60   # seconds of inactivity → enter cycle mode
-_CYCLE_INTERVAL_S = 60        # seconds per note step in cycle
-_TOTAL_NOTES      = 12        # Music_note range: 0-11
-
-# -- Embedded Chladni configs (no external JSON required) --------------------
-_DEFAULT_FREQUENCIES = [100, 150, 191, 220, 250, 300]
+_IDLE_TIMEOUT_S   = 5 * 60
+_CYCLE_INTERVAL_S = 60
+_TOTAL_NOTES      = 12
 
 
-def _default_channels(freq: float) -> list[dict]:
-    return [
-        {"amplitude": 0.85, "channel": 1, "frequency_hz": freq, "phase_deg": 0,   "x": 0.053, "y": 0.036},
-        {"amplitude": 0.85, "channel": 2, "frequency_hz": freq, "phase_deg": 90,  "x": 0.947, "y": 0.036},
-        {"amplitude": 0.85, "channel": 3, "frequency_hz": freq, "phase_deg": 180, "x": 0.053, "y": 0.964},
-        {"amplitude": 0.85, "channel": 4, "frequency_hz": freq, "phase_deg": 270, "x": 0.947, "y": 0.964},
+# ===========================================================================
+# 2b. MASTER SYMBOLS PARSER  (Spec 3 — zero hardcoded symbol data)
+# ===========================================================================
+
+def _load_master_symbols() -> "dict[str, dict]":
+    """
+    Parse master_symbols.json into {display_name: {music_note, led_effect,
+    channels, image_path}}.
+
+    Searched in order:
+      swaid-deploy/master_symbols.json  (canonical shared path)
+      swaid-deploy/master_symbol.json   (legacy singular name)
+      human-interface/master_symbols.json
+
+    Returns an empty dict on absence or parse failure — all callers must
+    treat an empty SYMBOLS as a valid (unconfigured) state.
+    """
+    candidates = [
+        Path(__file__).parent.parent / "master_symbols.json",
+        Path(__file__).parent.parent / "master_symbol.json",
+        Path(__file__).parent / "master_symbols.json",
     ]
+    path = next((p for p in candidates if p.exists()), None)
+    if path is None:
+        print("[Symbols] master_symbols.json not found — no symbol data loaded.")
+        return {}
 
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as exc:
+        print(f"[Symbols] Parse error: {exc}")
+        return {}
 
-def _build_configs() -> list[dict]:
-    return [
-        {
-            "display_name": f"CHLADNI_{freq}",
-            "hardware_config": {"channels": _default_channels(freq)},
-            "id": idx,
+    entries: list = raw if isinstance(raw, list) else raw.get("symbols", [])
+    result: dict[str, dict] = {}
+    for entry in entries:
+        name = entry.get("display_name")
+        if not name:
+            continue
+        result[name] = {
+            "music_note": int(entry.get("music_note", 0)),
+            "led_effect": int(entry.get("LED_effect", 0)),
+            "channels":   entry.get("hardware_config", {}).get("channels", []),
+            "image_path": entry.get("ui_metadata", {}).get("image_path", ""),
         }
-        for idx, freq in enumerate(_DEFAULT_FREQUENCIES)
-    ]
+
+    print(f"[Symbols] Loaded {len(result)} symbols from {path.name}: "
+          f"{', '.join(result)}")
+    return result
 
 
-def _config_channels(config: dict) -> list[dict]:
-    return config.get("hardware_config", {}).get("channels", []) if config else []
+# Module-level symbol map — populated once at import time.
+SYMBOLS: dict[str, dict] = _load_master_symbols()
 
 
 def _load_logo() -> "QPixmap | None":
-    """
-    Load FEUPLogo.png via Pillow preserving the alpha channel (RGBA),
-    convert to QImage Format_RGBA8888, return as QPixmap.
-    Falls back through legacy names so older assets still work.
-    """
-    candidates = [
-        _LOGO_FILE,
-        "FEUPLogo.tiff",
-        "FEUPLogo.tif",
-        "LogoFeup.png",
-        "LogoFeup.tiff",
-        "LogoFeup.tif",
-    ]
-
+    candidates = [_LOGO_FILE, "FEUPLogo.tiff", "FEUPLogo.tif",
+                  "LogoFeup.png", "LogoFeup.tiff", "LogoFeup.tif"]
     path: "Path | None" = None
     for name in candidates:
         p = _ASSETS_DIR / name
         if p.exists():
             path = p
             break
-
     if path is None:
         for p in _ASSETS_DIR.glob("Logo*.*"):
             path = p
             break
-
     if path is None:
         return None
 
-    # Qt native loader (fast path for PNG)
     try:
         pix = QPixmap(str(path))
         if not pix.isNull():
             return pix
     except Exception:
         pass
-
-    # Pillow fallback: RGBA → QImage → QPixmap
-    # Using RGBA so PNG transparency is preserved correctly.
     try:
         pil_img = Image.open(path).convert("RGBA")
         arr = np.array(pil_img, dtype=np.uint8)
@@ -138,112 +166,107 @@ def _load_logo() -> "QPixmap | None":
 
 
 # ===========================================================================
-# 3. RESONANCE SDK NATIVE BINDINGS
+# 3. RESONANCECLIENT INTEGRATION
+# ===========================================================================
+# All ZMQ communication is owned by ResonanceThread, a QThread with a
+# lock-protected command queue.  The main thread enqueues work non-blocking
+# and receives results via Qt signals — zero blocking on the paint/event loop.
+#
+# ResonanceClient uses zmq.REQ/REP (not ctypes/PUSH-PULL).
+# Key method: trigger_symbol(chladni_id, music_note, led_effect_id, vol_l, vol_r)
+# Returns bool: True = server ACK received, False = timeout / error.
 # ===========================================================================
 
-def _sdk_load() -> "ctypes.CDLL | None":
+class ResonanceThread(QThread):
     """
-    Load libresonance_sdk.so from the script's own directory.
-    Returns None (simulated mode) if the library is absent or fails to load.
+    Background thread that owns the ResonanceClient REQ/REP socket.
+    Dequeues 'trigger' and 'ping' commands and emits results as signals.
+    The 1-second socket timeout lives here, not on the UI thread.
     """
-    path = Path(__file__).parent / "libresonance_sdk.so"
-    if not path.exists():
-        print(f"[SDK] {path.name} not found — simulated mode active.")
-        return None
-    try:
-        lib = ctypes.CDLL(str(path))
-        print(f"[SDK] Loaded {path}")
-        return lib
-    except OSError as exc:
-        print(f"[SDK] Load error: {exc} — simulated mode active.")
-        return None
+    trigger_result = Signal(bool, str, int)   # (ok, chladni_id, note_id)
+    ping_result    = Signal(bool)             # True = pong received
 
+    def __init__(self, endpoint: str, parent=None):
+        super().__init__(parent)
+        self._endpoint = endpoint
+        self._client: "ResonanceClient | None" = None
+        self._lock    = threading.Lock()
+        self._queue: list = []
+        self._running = True
 
-def _sdk_configure(lib: ctypes.CDLL) -> None:
-    """Declare ctypes argtypes/restype for all SDK entry points."""
-    lib.init_zmq.argtypes    = [ctypes.c_char_p]
-    lib.init_zmq.restype     = None
+    # -- Public API (safe to call from any thread) ---------------------------
 
-    lib.close_zmq.argtypes   = []
-    lib.close_zmq.restype    = None
+    def enqueue_trigger(self, chladni_id: str, note_id: int,
+                        led_effect: int, vol_l: int, vol_r: int) -> None:
+        with self._lock:
+            self._queue.append(("trigger", chladni_id, note_id,
+                                led_effect, vol_l, vol_r))
 
-    # 3-field payload ABI: Music_note, Left_Volume, Right_volume + buffer
-    lib.format_json.argtypes = [
-        ctypes.c_int,    # Music_note   — 0-11
-        ctypes.c_float,  # Left_Volume  — 0.0 to 100.0
-        ctypes.c_float,  # Right_volume — 0.0 to 100.0
-        ctypes.c_char_p, # output buffer
-        ctypes.c_int,    # buffer size
-    ]
-    lib.format_json.restype  = None
+    def enqueue_ping(self) -> None:
+        with self._lock:
+            self._queue.append(("ping",))
 
-    lib.send_zmq.argtypes    = [ctypes.c_char_p]
-    lib.send_zmq.restype     = ctypes.c_int
+    def stop(self) -> None:
+        self._running = False
 
+    # -- Thread body ---------------------------------------------------------
 
-def _sdk_init() -> "ctypes.CDLL | None":
-    """Load, configure, and connect the SDK.  Returns the lib handle or None."""
-    lib = _sdk_load()
-    if lib is None:
-        return None
-    _sdk_configure(lib)
-    lib.init_zmq(_ZMQ_ADDRESS)
-    print(f"[SDK] ZeroMQ connected → {_ZMQ_ADDRESS.decode()}")
-    return lib
+    def run(self) -> None:
+        if ResonanceClient is not None:
+            try:
+                self._client = ResonanceClient(self._endpoint)
+                print(f"[ResonanceClient] Connected → {self._endpoint}")
+            except Exception as exc:
+                print(f"[ResonanceClient] Init error: {exc} — simulated mode.")
 
+        while self._running:
+            with self._lock:
+                msg = self._queue.pop(0) if self._queue else None
 
-def _sdk_send(lib: "ctypes.CDLL | None",
-              note_id: int,
-              left_volume: float,
-              right_volume: float) -> None:
-    """Format and transmit a hardware packet for the given Music_note and volumes."""
-    if lib is None:
-        print(f"[SDK sim] Music_note={note_id}  "
-              f"Left_Volume={left_volume:.1f}  Right_volume={right_volume:.1f}")
-        return
-    buf = ctypes.create_string_buffer(512)
-    lib.format_json(
-        ctypes.c_int(note_id),
-        ctypes.c_float(left_volume),
-        ctypes.c_float(right_volume),
-        buf, 512,
-    )
-    result = lib.send_zmq(buf.value)
-    if result == 1:
-        print(f"[SDK] Sent Music_note={note_id}  "
-              f"Left_Volume={left_volume:.1f}  Right_volume={right_volume:.1f}")
-    elif result == 0:
-        print(f"[SDK] ZMQ queue full — dropped (Music_note={note_id})")
-    else:
-        print(f"[SDK] Error result={result} (Music_note={note_id})")
+            if msg is None:
+                self.msleep(10)
+                continue
+
+            kind = msg[0]
+            if kind == "trigger":
+                _, chladni_id, note_id, led_effect, vol_l, vol_r = msg
+                if self._client is not None:
+                    ok = self._client.trigger_symbol(
+                        chladni_id, note_id, led_effect, vol_l, vol_r)
+                else:
+                    print(f"[ResonanceClient sim] trigger_symbol({chladni_id!r}, "
+                          f"note={note_id}, led={led_effect}, "
+                          f"L={vol_l}, R={vol_r})")
+                    ok = True
+                self.trigger_result.emit(ok, chladni_id, note_id)
+
+            elif kind == "ping":
+                if self._client is not None:
+                    ok = self._client.ping()
+                else:
+                    ok = False  # simulated: always offline
+                self.ping_result.emit(ok)
 
 
 # ===========================================================================
-# 4. STATE MANAGEMENT & TIMERS  (housed inside MainWindow.__init__)
+# 4. STATE MANAGEMENT & TIMERS
 # ===========================================================================
-# All mutable state lives on the MainWindow instance.  Five subsystems:
+# MainWindow subsystems:
 #
-#   Heartbeat     — self._heartbeat_enabled  (bool, toggled by [H])
-#                   self._heartbeat_warning  (bool, set after 3 missed pongs)
-#                   self._hb_consecutive_misses  (int, reset on pong receipt)
-#                   self._hb_timer  (QTimer, _HEARTBEAT_INTERVAL_S interval)
-#                   Fires _heartbeat_tick(); call receive_pong() from outside.
+#   ResonanceThread — self._resonance
+#                     All trigger_symbol / ping calls dispatched through it.
 #
-#   Volumes       — self._left_volume  (float 0-100, Left_Volume)
-#                   self._right_volume (float 0-100, Right_volume)
-#                   Controlled via painted vertical sliders; included in
-#                   every outgoing SDK packet.
+#   Heartbeat       — _heartbeat_enabled / _heartbeat_warning /
+#                     _hb_consecutive_misses / _hb_timer (QTimer 2 s).
+#                     [H] key toggles.  Pong comes back via ping_result signal.
 #
-#   Debounce      — self._last_note_change  (time.time float)
-#                   Rejects manual note changes < 1 s apart.
+#   Volumes         — _left_volume / _right_volume (int 0-100).
 #
-#   Idle tracker  — self._last_interaction  (time.monotonic float)
-#                   Checked every animation frame; triggers cycle after 5 min.
+#   Debounce        — _last_note_change (time.time float, 1 s gate).
 #
-#   Cycle timer   — self._idle_timer        (QTimer, 60 s interval)
-#                   Fires _advance_idle_cycle() while attract mode is active.
+#   Idle            — _last_interaction / _idle_timer (QTimer 60 s).
 #
-# See _init_state() for initialization and the subsystem methods below.
+# Symbol images:     _symbol_images (dict[str, QImage]) — preloaded in __init__.
 # ===========================================================================
 
 
@@ -252,7 +275,6 @@ def _sdk_send(lib: "ctypes.CDLL | None",
 # ===========================================================================
 
 class MainWindow(QWidget):
-    # Qt signals
     settings_requested = Signal()
     testing_toggle     = Signal()
 
@@ -269,17 +291,40 @@ class MainWindow(QWidget):
         self.setCursor(Qt.BlankCursor)
 
         self._init_animation_state()
-        self._init_state()          # Section 4: all subsystems
+        self._init_state()
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
-        self.timer.start(16)        # ~60 fps
+        self.timer.start(16)
 
-        self.configs = _build_configs()
-        self._logo   = _load_logo()
+        self._logo = _load_logo()
+
+        # Preload dictionary symbol images into cache
+        self._symbol_images: dict[str, QImage] = {}
+        self._preload_symbol_images()
+
+    def _preload_symbol_images(self) -> None:
+        """Load ui_metadata.image_path for every SYMBOLS entry into QImage cache."""
+        base = _MASTER_SYMBOLS_PATH.parent
+        for name, entry in SYMBOLS.items():
+            raw = entry.get("image_path", "")
+            if not raw:
+                continue
+            img_path = (base / raw.lstrip("./")).resolve()
+            if not img_path.exists():
+                continue
+            try:
+                pil_img = Image.open(img_path).convert("RGBA")
+                arr     = np.array(pil_img, dtype=np.uint8)
+                h, w    = arr.shape[:2]
+                qimg    = QImage(arr.data, w, h, w * 4,
+                                 QImage.Format_RGBA8888).copy()
+                self._symbol_images[name] = qimg
+                print(f"[Symbols] Image loaded: {name}")
+            except Exception as exc:
+                print(f"[Symbols] Image load failed for {name}: {exc}")
 
     def _init_animation_state(self) -> None:
-        """Visual / interaction variables."""
         self.t                   = 0.0
         self.frequency           = 2.7
         self.wave_amplitude      = 0.0
@@ -298,10 +343,15 @@ class MainWindow(QWidget):
         self.dwell_started_at    = 0.0
         self.dwell_progress      = 0.0
         self.dwell_duration      = 0.7
+        self._dwell_note_id      = 0    # note locked when dwell begins, immune to mode changes
+        self._selected_note_id   = 0    # committed note — drives preview/waves, NOT using_image_mode
+        self._dwell_armed        = True # cursor must leave ring before the SAME note can re-fire
         self.image_btn_hover     = False
         self.image_btn_rect      = QRectF()
-        self.selector_radius_scale      = 0.39
-        self.center_plate_radius_scale  = 0.265
+
+        # Spec 1: center circle enlarged (0.265 → 0.33)
+        self.selector_radius_scale     = 0.39
+        self.center_plate_radius_scale = 0.33
 
         self.sector_labels = ["E", "D", "C", "B", "A", "F"]
         self.image_labels  = ["D#", "F#", "G#", "A#", "G", "C#"]
@@ -316,12 +366,14 @@ class MainWindow(QWidget):
         ]
 
     def _init_state(self) -> None:
-        """Section 4: all five subsystems."""
 
-        # -- SDK (Section 3) -------------------------------------------------
-        self._sdk = _sdk_init()
+        # -- ResonanceThread (Section 3) -------------------------------------
+        self._resonance = ResonanceThread(_RESONANCE_ENDPOINT, self)
+        self._resonance.trigger_result.connect(self._on_trigger_result)
+        self._resonance.ping_result.connect(self._on_ping_result)
+        self._resonance.start()
 
-        # -- Heartbeat (HI ↔ PR ping-pong monitoring) -----------------------
+        # -- Heartbeat -------------------------------------------------------
         self._heartbeat_enabled:     bool = True
         self._heartbeat_warning:     bool = False
         self._hb_consecutive_misses: int  = 0
@@ -331,34 +383,60 @@ class MainWindow(QWidget):
         self._hb_timer.timeout.connect(self._heartbeat_tick)
         self._hb_timer.start()
 
-        # -- Volumes (Left_Volume and Right_volume, sent with every packet) --
-        self._left_volume:  float = _DEFAULT_LEFT_VOLUME
-        self._right_volume: float = _DEFAULT_RIGHT_VOLUME
+        # -- Volumes ---------------------------------------------------------
+        self._left_volume:  int = _DEFAULT_LEFT_VOLUME
+        self._right_volume: int = _DEFAULT_RIGHT_VOLUME
 
-        # -- Volume slider interaction state ---------------------------------
-        self._dragging_slider: "str | None" = None  # "left" or "right"
-        self._vol_rect_left  = QRectF()
-        self._vol_rect_right = QRectF()
+        # -- Debounce --------------------------------------------------------
+        self._last_note_change: float = 0.0
 
-        # -- Debounce (1-second rate limiter for manual note changes) --------
-        self._last_note_change: float = 0.0   # wall-clock time.time()
-
-        # -- Idle tracker (5-minute inactivity window) -----------------------
+        # -- Idle ------------------------------------------------------------
         self._last_interaction: float = time.monotonic()
         self._idle_active:      bool  = False
-        self._idle_note:        int   = 0     # current note position in cycle
+        self._idle_note:        int   = 0
 
-        # -- Cycle timer (advances note every 60 s while idle) ---------------
         self._idle_timer = QTimer(self)
         self._idle_timer.setInterval(_CYCLE_INTERVAL_S * 1000)
         self._idle_timer.timeout.connect(self._advance_idle_cycle)
 
     # -----------------------------------------------------------------------
-    # Section 4: Heartbeat (HI ↔ PR ping-pong)
+    # Section 3: ResonanceThread result handlers
+    # -----------------------------------------------------------------------
+
+    def _on_trigger_result(self, ok: bool, chladni_id: str, note_id: int) -> None:
+        ts = time.strftime("%H:%M:%S")
+        status = "OK" if ok else "FAILED"
+        print(f"[{ts}] [ResonanceClient] trigger_symbol {status} — "
+              f"{chladni_id}  note={note_id}")
+
+    def _on_ping_result(self, ok: bool) -> None:
+        ts = time.strftime("%H:%M:%S")
+        if ok:
+            print(f"[{ts}] [Heartbeat] Pong received — link OK")
+            self._hb_consecutive_misses = 0
+            if self._heartbeat_warning:
+                self._heartbeat_warning = False
+                print(f"[{ts}] [Heartbeat] Comm link restored")
+        else:
+            self._hb_consecutive_misses += 1
+            print(f"[{ts}] [Heartbeat] No pong "
+                  f"(consecutive misses: {self._hb_consecutive_misses})")
+            if (self._hb_consecutive_misses >= _HEARTBEAT_MISS_THRESHOLD
+                    and not self._heartbeat_warning):
+                self._heartbeat_warning = True
+                print(f"[{ts}] [Heartbeat] WARNING — "
+                      f"{self._hb_consecutive_misses} pings without pong")
+        self.update()
+
+    # -----------------------------------------------------------------------
+    # Section 4: DAVIDSOUND — dedicated audio routing
+    # -----------------------------------------------------------------------
+
+    # -----------------------------------------------------------------------
+    # Section 4: Heartbeat
     # -----------------------------------------------------------------------
 
     def _toggle_heartbeat(self) -> None:
-        """Enable or disable the ping-pong heartbeat system ([H] key)."""
         self._heartbeat_enabled = not self._heartbeat_enabled
         ts = time.strftime("%H:%M:%S")
         if self._heartbeat_enabled:
@@ -375,52 +453,46 @@ class MainWindow(QWidget):
         self.update()
 
     def _heartbeat_tick(self) -> None:
-        """Fires every _HEARTBEAT_INTERVAL_S seconds: send ping, track misses."""
-        self._send_heartbeat_ping()
-        self._hb_consecutive_misses += 1
         ts = time.strftime("%H:%M:%S")
         print(f"[{ts}] [Heartbeat] Ping dispatched "
-              f"(consecutive misses: {self._hb_consecutive_misses})")
-        if (self._hb_consecutive_misses >= _HEARTBEAT_MISS_THRESHOLD
-                and not self._heartbeat_warning):
-            self._heartbeat_warning = True
-            print(f"[{ts}] [Heartbeat] WARNING — "
-                  f"{self._hb_consecutive_misses} consecutive pings without pong")
-        self.update()
-
-    def _send_heartbeat_ping(self) -> None:
-        """Transmit a raw ping JSON over the existing ZMQ PUSH socket."""
-        if self._sdk is not None:
-            self._sdk.send_zmq(b'{"message_type":"ping"}')
-
-    def receive_pong(self) -> None:
-        """Call this when a pong arrives from the PR driver (external entry point)."""
-        ts = time.strftime("%H:%M:%S")
-        print(f"[{ts}] [Heartbeat] Pong received — resetting miss counter")
-        self._hb_consecutive_misses = 0
-        if self._heartbeat_warning:
-            self._heartbeat_warning = False
-            print(f"[{ts}] [Heartbeat] Comm link restored")
-        self.update()
+              f"(current miss streak: {self._hb_consecutive_misses})")
+        self._resonance.enqueue_ping()
 
     # -----------------------------------------------------------------------
-    # Section 4: Idle / attract-cycle control
+    # Section 4: Idle / attract-cycle
     # -----------------------------------------------------------------------
+
+    def _chladni_id_for_note(self, note_id: int) -> str:
+        for name, entry in SYMBOLS.items():
+            if entry["music_note"] == note_id:
+                return name
+        return ""
 
     def _enter_idle_mode(self) -> None:
         if self._idle_active:
             return
         self._idle_active = True
         self._idle_note   = 0
-        print(f"[Idle] Entering cycle mode (no interaction for "
-              f"{_IDLE_TIMEOUT_S // 60} min).")
-        _sdk_send(self._sdk, self._idle_note, self._left_volume, self._right_volume)
+        print(f"[Idle] Entering cycle mode ({_IDLE_TIMEOUT_S // 60} min idle).")
+        self._dispatch_idle_note()
         self._idle_timer.start()
 
     def _advance_idle_cycle(self) -> None:
         self._idle_note = (self._idle_note + 1) % _TOTAL_NOTES
-        print(f"[Idle] Cycle → Music_note {self._idle_note}")
-        _sdk_send(self._sdk, self._idle_note, self._left_volume, self._right_volume)
+        self._dispatch_idle_note()
+
+    def _dispatch_idle_note(self) -> None:
+        chladni_id = self._chladni_id_for_note(self._idle_note)
+        ts = time.strftime("%H:%M:%S")
+        if chladni_id:
+            led = SYMBOLS[chladni_id]["led_effect"]
+            print(f"[{ts}] [Idle] Cycle → note {self._idle_note} ({chladni_id})")
+            self._resonance.enqueue_trigger(
+                chladni_id, self._idle_note, led,
+                self._left_volume, self._right_volume,
+            )
+        else:
+            print(f"[{ts}] [Idle] Cycle → note {self._idle_note} (no symbol)")
 
     def _exit_idle_mode(self) -> None:
         if not self._idle_active:
@@ -430,61 +502,48 @@ class MainWindow(QWidget):
         print("[Idle] User detected — exiting cycle mode.")
 
     def _record_interaction(self) -> None:
-        """Call on any user input to reset the idle countdown."""
         self._last_interaction = time.monotonic()
         self._exit_idle_mode()
 
     # -----------------------------------------------------------------------
-    # Section 4: Note-ID resolution (Section 2 NOTE_MAP applied here)
+    # Section 4: Note-ID / symbol resolution (reads from SYMBOLS only)
     # -----------------------------------------------------------------------
 
     def _note_id_for_section(self, section: int) -> int:
         labels = self.image_labels if self.using_image_mode() else self.sector_labels
         return NOTE_MAP.get(labels[section % len(labels)], 0)
 
-    # -----------------------------------------------------------------------
-    # Section 4: Volume slider geometry and interaction helpers
-    # -----------------------------------------------------------------------
+    def _symbol_name_for_section(self, section: int) -> str:
+        return self._chladni_id_for_note(self._note_id_for_section(section))
 
-    def _compute_vol_rects(self) -> None:
-        """Recompute both slider rects from current window dimensions."""
-        top = self.height() * 0.22
-        ht  = self.height() * 0.56          # slider track height
-        self._vol_rect_left  = QRectF(20,                    top, 26, ht)
-        self._vol_rect_right = QRectF(self.width() - 46,     top, 26, ht)
+    def _channels_for_section(self, section: int) -> list[dict]:
+        """
+        Return hardware channel array from SYMBOLS for the given section.
+        Returns [] if SYMBOLS is empty or note unmapped — _draw_wave handles
+        the empty case with built-in fallback rendering.
+        """
+        note_id = self._note_id_for_section(section)
+        return self._channels_for_note(note_id)
 
-    def _vol_from_mouse_y(self, rect: QRectF, y: float) -> float:
-        """Map mouse y within a slider rect to 0.0–100.0 (top = 100, bottom = 0)."""
-        rel = (y - rect.top()) / max(1.0, rect.height())
-        return max(0.0, min(100.0, (1.0 - rel) * 100.0))
+    def _channels_for_note(self, note_id: int) -> list[dict]:
+        """Hardware channel array for a committed note_id (independent of hand mode)."""
+        for entry in SYMBOLS.values():
+            if entry["music_note"] == note_id:
+                return entry["channels"]
+        return []
 
-    def _hit_vol_slider(self, pos: QPointF) -> "str | None":
-        """Return 'left', 'right', or None for which slider the point lands in."""
-        if self._vol_rect_left.adjusted(-6, -6, 6, 6).contains(pos):
-            return "left"
-        if self._vol_rect_right.adjusted(-6, -6, 6, 6).contains(pos):
-            return "right"
-        return None
-
-    def _apply_slider_drag(self, pos: QPointF) -> None:
-        """Update the dragged volume and fire an SDK packet."""
-        if self._dragging_slider == "left":
-            self._left_volume  = self._vol_from_mouse_y(self._vol_rect_left,  pos.y())
-        elif self._dragging_slider == "right":
-            self._right_volume = self._vol_from_mouse_y(self._vol_rect_right, pos.y())
-        else:
-            return
-        note_id = self._note_id_for_section(self.selected_section)
-        _sdk_send(self._sdk, note_id, self._left_volume, self._right_volume)
+    def _display_note_id(self) -> int:
+        """
+        The note currently shown by preview + waves.
+        Idle cycle note while attract-mode runs, otherwise the committed
+        selection.  NEVER derived from section/using_image_mode — so opening
+        or closing the hand cannot change what is displayed.
+        """
+        return self._idle_note if self._idle_active else self._selected_note_id
 
     # -----------------------------------------------------------------------
-    # Section 5: Core widget interface called by main.py
+    # Section 5: Core widget interface (called by main.py)
     # -----------------------------------------------------------------------
-
-    def current_config(self) -> dict:
-        if not self.configs:
-            return {}
-        return self.configs[self.selected_section % len(self.configs)]
 
     def set_tracked_hands(self, left_hand=None, right_hand=None,
                           blue_hand_closed: bool = False,
@@ -495,7 +554,9 @@ class MainWindow(QWidget):
         self.external_left_hand  = left_hand
         self.external_right_hand = right_hand
         self.external_hands_time = time.monotonic()
-        self.blue_hand_closed    = blue_hand_closed
+        # blue_hand_closed is stored for visual rendering only — Spec 2:
+        # hand open/close gestures are completely removed from note selection.
+        self.blue_hand_closed = blue_hand_closed
 
         if cursor_point is not None:
             self.mouse_pos       = cursor_point
@@ -514,31 +575,29 @@ class MainWindow(QWidget):
 
     def update_animation(self) -> None:
         self.t += 0.05
-        channels = _config_channels(self.current_config())
+        channels = self._channels_for_note(self._display_note_id())
         if channels:
-            avg_amp  = sum(ch["amplitude"]    for ch in channels) / len(channels)
             avg_freq = sum(ch["frequency_hz"] for ch in channels) / len(channels)
         else:
-            avg_amp, avg_freq = 1.0, 200.0
+            avg_freq = 200.0
 
-        self.wave_amplitude = avg_amp * (0.50 + 0.45 * abs(math.sin(self.t * 0.9)))
+        # wave_amplitude is a pure visual oscillator — decoupled from
+        # hardware amplitude values (tiny floats in master_symbols.json).
+        self.wave_amplitude = 0.50 + 0.45 * abs(math.sin(self.t * 0.9))
         self.frequency      = avg_freq
 
-        # Idle threshold check (runs every ~16 ms)
         if not self._idle_active:
-            elapsed = time.monotonic() - self._last_interaction
-            if elapsed >= _IDLE_TIMEOUT_S:
+            if time.monotonic() - self._last_interaction >= _IDLE_TIMEOUT_S:
                 self._enter_idle_mode()
 
         self.update_dwell_selection()
         self.update()
 
     # -----------------------------------------------------------------------
-    # Section 4: Dwell selection with debounce (1 s rate limiter)
+    # Section 4: Dwell selection — Spec 2 gesture lock
     # -----------------------------------------------------------------------
 
     def update_dwell_selection(self) -> None:
-        # Manual input is suppressed while the attract cycle runs
         if self._idle_active:
             return
 
@@ -548,58 +607,60 @@ class MainWindow(QWidget):
         if section < 0:
             self.dwell_section  = -1
             self.dwell_progress = 0.0
+            self._dwell_armed   = True   # cursor left the ring → re-arm for re-selection
             return
 
-        needs_selection = (
-            section != self.selected_section
-            or (self.blue_hand_closed and not self.using_image_mode())
-        )
+        # needs_selection: dwell allowed on a different section, OR on the same
+        # section after the cursor has left the ring and returned (_dwell_armed).
+        # This lets the user re-select the same note by exiting and re-entering.
+        needs_selection = section != self.selected_section or self._dwell_armed
         if not needs_selection or section != self.dwell_section:
             self.dwell_section    = section
             self.dwell_started_at = now
             self.dwell_progress   = 0.0
+            # Lock the note_id now, at dwell start.
+            # If hand opens/closes mid-dwell (mode changes), this stays fixed.
+            self._dwell_note_id   = self._note_id_for_section(section)
             return
 
         self.dwell_progress = min(1.0, (now - self.dwell_started_at) / self.dwell_duration)
         if self.dwell_progress < 1.0:
             return
 
-        # Debounce: reject if < 1 s since last accepted note change
+        # Debounce: reject rapid repeated triggers
         wall_now = time.time()
         if wall_now - self._last_note_change < 1.0:
             self.dwell_progress = 0.0
             return
 
-        # Accept selection
-        self.selected_section = section
-        channels = _config_channels(self.current_config())
-        if channels:
-            self.frequency = sum(ch["frequency_hz"] for ch in channels) / len(channels)
-        if self.blue_hand_closed:
-            self.sharp_mode_until = now + 1.5
+        # Accept selection — use _dwell_note_id locked at dwell start.
+        # This means hand open/close mid-dwell cannot change what note gets sent.
+        self.selected_section  = section
+        self._selected_note_id = self._dwell_note_id   # commit — display reads this
+        chladni_id = self._chladni_id_for_note(self._dwell_note_id)
+        if chladni_id:
+            sym_channels = SYMBOLS[chladni_id]["channels"]
+            if sym_channels:
+                self.frequency = sum(ch["frequency_hz"] for ch in sym_channels) / len(sym_channels)
+            led = SYMBOLS[chladni_id]["led_effect"]
+            ts  = time.strftime("%H:%M:%S")
+            print(f"[{ts}] [Trigger] {chladni_id}  note={self._dwell_note_id}")
+            self._resonance.enqueue_trigger(
+                chladni_id, self._dwell_note_id, led,
+                self._left_volume, self._right_volume)
 
-        # Resolve Music_note, transmit, update timestamps
-        note_id = self._note_id_for_section(section)
-        _sdk_send(self._sdk, note_id, self._left_volume, self._right_volume)
-
-        self._last_note_change = wall_now   # debounce timestamp
-        self._last_interaction = now        # reset idle countdown
+        self._last_note_change = wall_now
+        self._last_interaction = now
         self.dwell_progress    = 0.0
+        self._dwell_armed      = False   # disarm — must leave ring to fire same note again
 
     # -----------------------------------------------------------------------
     # Section 5: Qt event handlers
     # -----------------------------------------------------------------------
 
     def mouseMoveEvent(self, event) -> None:
-        pos = QPointF(event.position())
         self._record_interaction()
-
-        # Volume slider drag takes priority over section hover
-        if self._dragging_slider is not None:
-            self._apply_slider_drag(pos)
-            self.update()
-            return
-
+        pos              = QPointF(event.position())
         self.mouse_pos       = pos
         self.hover_section   = self.section_at(pos)
         self.image_btn_hover = self.image_btn_rect.contains(pos)
@@ -607,26 +668,10 @@ class MainWindow(QWidget):
 
     def mousePressEvent(self, event) -> None:
         self._record_interaction()
-        pos = QPointF(event.position())
-
-        if event.button() == Qt.LeftButton:
-            slider = self._hit_vol_slider(pos)
-            if slider is not None:
-                self._dragging_slider = slider
-                self._apply_slider_drag(pos)
-                self.update()
-                return
-
-            if self.image_btn_rect.contains(pos):
-                self.image_mode = not self.image_mode
-                self.update()
-
-    def mouseReleaseEvent(self, event) -> None:
-        if self._dragging_slider is not None:
-            self._dragging_slider = None
+        if (event.button() == Qt.LeftButton
+                and self.image_btn_rect.contains(event.position())):
+            self.image_mode = not self.image_mode
             self.update()
-            return
-        super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event) -> None:
         if event.isAutoRepeat():
@@ -639,7 +684,9 @@ class MainWindow(QWidget):
         elif key == Qt.Key_I:
             self.testing_toggle.emit()
         elif key == Qt.Key_F:
+            # Spec 2: F key explicitly enters sharp mode — hand sensor does NOT.
             self.blue_hand_closed = True
+            self.sharp_mode_until = time.monotonic() + 86400  # held until key release
             self._record_interaction()
             self.update()
         else:
@@ -648,29 +695,26 @@ class MainWindow(QWidget):
     def keyReleaseEvent(self, event) -> None:
         if not event.isAutoRepeat() and event.key() == Qt.Key_F:
             self.blue_hand_closed = False
+            self.sharp_mode_until = 0.0
             self.update()
             return
         super().keyReleaseEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.hover_section    = -1
-        self.image_btn_hover  = False
-        self._dragging_slider = None
+        self.hover_section   = -1
+        self.image_btn_hover = False
         self.update()
         super().leaveEvent(event)
 
     def closeEvent(self, event) -> None:
-        """Stop heartbeat timer and close ZMQ socket on window close."""
+        """Shut down background ResonanceThread and heartbeat timer cleanly."""
         self._hb_timer.stop()
-        if self._sdk is not None:
-            try:
-                self._sdk.close_zmq()
-            except Exception:
-                pass
+        self._resonance.stop()
+        self._resonance.wait(2000)
         super().closeEvent(event)
 
     # -----------------------------------------------------------------------
-    # Section 5: Paint
+    # Section 5: Paint  (layer order: background → wave → UI → overlays)
     # -----------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:
@@ -681,51 +725,51 @@ class MainWindow(QWidget):
         cx, cy      = w / 2, h / 2
         base_radius = min(w, h)
 
+        # Layer 1: solid background
         painter.fillRect(self.rect(), QColor("#020203"))
 
+        # Layer 2: diagonal background wave (deepest visual layer)
+        channels = self._channels_for_note(self._display_note_id())
+        painter.save()
+        painter.rotate(30)
+        self._draw_wave(painter, 0, 0, length=1200, channels=channels)
+        painter.restore()
+
+        # Layer 3: interactive UI
         selector_radius = base_radius * self.selector_radius_scale
-        center_radius   = base_radius * self.center_plate_radius_scale
-        preview_radius  = max(100, min(58, base_radius * 0.07))
+        center_radius   = base_radius * self.center_plate_radius_scale  # enlarged
+        preview_radius  = max(150, base_radius * 0.13)   # CIRCLO PRREVIEW
 
         img_btn_x = w - 104
         img_btn_y = 16
         preview_x = w - preview_radius - 20
         preview_y = h - preview_radius - 20
 
-        # Background wave (unchanged from original)
-        channels = _config_channels(self.current_config())
-        painter.save()
-        painter.rotate(30)
-        self._draw_wave(painter, 0, 0, length=600, channels=channels)
-        painter.restore()
-
         self._draw_selector(painter, cx, cy, selector_radius)
         self._draw_reference_center(painter, cx, cy, center_radius)
+        # Dwell ring drawn HERE — after center circle so it's never buried beneath it
+        self._draw_dwell_loader(painter, cx, cy, selector_radius)
         self._draw_reference_disc(painter, preview_x, preview_y, preview_radius)
         self._draw_hands(painter)
         self._draw_image_button(painter, img_btn_x, img_btn_y)
-        self._draw_volume_sliders(painter)
 
-        # Idle attract indicator
+        # Layer 4: status overlays
         if self._idle_active:
             pulse = 0.55 + 0.45 * abs(math.sin(self.t * 0.6))
             c = QColor(0, 217, 232, int(200 * pulse))
             painter.setPen(c)
             painter.setFont(QFont("Arial", 13, QFont.Bold))
-            painter.drawText(QRectF(16, 16, 340, 24),
+            sym = self._chladni_id_for_note(self._idle_note) or "—"
+            painter.drawText(QRectF(16, 16, 400, 24),
                              Qt.AlignLeft | Qt.AlignVCenter,
-                             f"● ATTRACT  Music_note {self._idle_note}")
+                             f"● ATTRACT  note {self._idle_note}  ({sym})")
 
-        # FEUP logo — bottom-left
         if self._logo and not self._logo.isNull():
             lh = 100
             lw = int(lh * self._logo.width() / self._logo.height())
             painter.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
 
-        # Keyboard hint bar — bottom-centre
         self._draw_hints(painter, w, h)
-
-        # Heartbeat status indicator (non-blocking, top-right, above image button)
         self._draw_heartbeat_indicator(painter, w)
 
     # -----------------------------------------------------------------------
@@ -733,14 +777,8 @@ class MainWindow(QWidget):
     # -----------------------------------------------------------------------
 
     def _draw_heartbeat_indicator(self, painter: QPainter, w: int) -> None:
-        """
-        Small status badge drawn above the image button (y < 14).
-        Green pulse = healthy.  Static red = comm failure.
-        Invisible when heartbeat is disabled.
-        """
         if not self._heartbeat_enabled:
             return
-
         if self._heartbeat_warning:
             dot_color = QColor("#ff0038")
             label     = f"HB FAIL  ({self._hb_consecutive_misses} missed)"
@@ -749,64 +787,14 @@ class MainWindow(QWidget):
             dot_color = QColor(0, 255, 37, int(210 * pulse))
             label     = "HB OK"
 
-        # Dot
-        dot_x = w - 168.0
-        dot_y = 8.0
+        dot_x, dot_y = w - 168.0, 8.0
         painter.setBrush(dot_color)
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(QPointF(dot_x, dot_y), 4, 4)
-
-        # Label text
         painter.setPen(dot_color)
         painter.setFont(QFont("Arial", 9, QFont.Bold))
         painter.drawText(QRectF(dot_x + 10, dot_y - 7, 150, 15),
                          Qt.AlignLeft | Qt.AlignVCenter, label)
-
-    # -----------------------------------------------------------------------
-    # Section 5: Volume sliders
-    # -----------------------------------------------------------------------
-
-    def _draw_volume_sliders(self, painter: QPainter) -> None:
-        self._compute_vol_rects()
-        self._draw_one_slider(painter, self._vol_rect_left,  self._left_volume,
-                              "LVol", active=self._dragging_slider == "left")
-        self._draw_one_slider(painter, self._vol_rect_right, self._right_volume,
-                              "RVol", active=self._dragging_slider == "right")
-
-    def _draw_one_slider(self, painter: QPainter, rect: QRectF,
-                         value: float, label: str, active: bool) -> None:
-        fill_color = QColor("#7adfff") if active else QColor("#00d9e8")
-        fill_h     = rect.height() * (value / 100.0)
-
-        # Track
-        painter.setBrush(QColor("#1a2030"))
-        painter.setPen(QPen(QColor("#2a3a55"), 1))
-        painter.drawRoundedRect(rect, 5, 5)
-
-        # Filled portion (bottom-up)
-        if fill_h > 0:
-            fill_rect = QRectF(rect.x(), rect.bottom() - fill_h,
-                               rect.width(), fill_h)
-            painter.setBrush(fill_color)
-            painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(fill_rect, 5, 5)
-
-        # Thumb line
-        thumb_y = rect.bottom() - fill_h
-        painter.setPen(QPen(QColor("#ffffff"), 2))
-        painter.drawLine(QPointF(rect.x(), thumb_y), QPointF(rect.right(), thumb_y))
-
-        # Label above slider
-        painter.setFont(QFont("Arial", 9, QFont.Bold))
-        painter.setPen(QColor("#6677aa"))
-        painter.drawText(QRectF(rect.x() - 4, rect.top() - 18, rect.width() + 8, 16),
-                         Qt.AlignCenter, label)
-
-        # Value below slider
-        painter.setFont(QFont("Arial", 9))
-        painter.setPen(fill_color if active else QColor("#445566"))
-        painter.drawText(QRectF(rect.x() - 4, rect.bottom() + 2, rect.width() + 8, 16),
-                         Qt.AlignCenter, f"{value:.0f}")
 
     # -----------------------------------------------------------------------
     # Section 5: Hint bar
@@ -826,8 +814,7 @@ class MainWindow(QWidget):
         painter.setFont(lbl_font)
         fm_lbl = painter.fontMetrics()
 
-        parts   = []
-        total_w = 0
+        parts, total_w = [], 0
         for key, label in hints:
             kw = fm_key.horizontalAdvance(key)
             lw = fm_lbl.horizontalAdvance("  " + label)
@@ -837,12 +824,11 @@ class MainWindow(QWidget):
 
         hx = (w - total_w) / 2
         for i, (key, label, kw, lw) in enumerate(parts):
-            # [H] key turns red when heartbeat is warning
-            is_hb_key   = (i == len(hints) - 1)
-            key_color   = (QColor("#ff0038") if is_hb_key and self._heartbeat_warning
-                           else QColor("#00d9e8"))
+            is_hb = (i == len(hints) - 1)
+            kc    = (QColor("#ff0038") if is_hb and self._heartbeat_warning
+                     else QColor("#00d9e8"))
             painter.setFont(key_font)
-            painter.setPen(key_color)
+            painter.setPen(kc)
             painter.drawText(QRectF(hx, hint_y - 14, kw, 18),
                              Qt.AlignLeft | Qt.AlignVCenter, key)
             hx += kw
@@ -869,6 +855,8 @@ class MainWindow(QWidget):
         return int(angle // 60) % 6
 
     def using_image_mode(self) -> bool:
+        # Left-hand fist (blue_hand_closed) switches the visual circle labels only.
+        # It does NOT select/transmit any note — that only happens via completed dwell.
         return (self.image_mode or self.blue_hand_closed
                 or time.monotonic() < self.sharp_mode_until)
 
@@ -882,7 +870,7 @@ class MainWindow(QWidget):
         return QRectF(0, (ih - sh) / 2, sw, sh)
 
     # -----------------------------------------------------------------------
-    # Section 5: Wave renderer (background, unchanged)
+    # Section 5: Wave renderer
     # -----------------------------------------------------------------------
 
     def _draw_wave(self, painter: QPainter, x0: float, y0: float,
@@ -895,10 +883,14 @@ class MainWindow(QWidget):
                       QColor("#00eaff"), QColor("#ff8500")]
 
         if channels and len(channels) >= wave_count:
-            amps    = [ch["amplitude"]   for ch in channels[:wave_count]]
-            wknums  = [0.025 + 0.060 * (ch["frequency_hz"] / 500.0)
-                       for ch in channels[:wave_count]]
-            phases  = [math.radians(ch["phase_deg"]) for ch in channels[:wave_count]]
+            # Normalize hardware amplitudes to [0,1] for display — raw values
+            # from master_symbols.json are tiny floats (0.01–0.21).
+            raw_amps = [ch["amplitude"] for ch in channels[:wave_count]]
+            max_amp  = max(raw_amps) if any(a > 0 for a in raw_amps) else 1.0
+            amps     = [a / max_amp for a in raw_amps]
+            wknums   = [0.025 + 0.060 * (ch["frequency_hz"] / 500.0)
+                        for ch in channels[:wave_count]]
+            phases   = [math.radians(ch["phase_deg"]) for ch in channels[:wave_count]]
         else:
             amps   = [1.0] * 4
             wknums = [0.055] * 4
@@ -935,18 +927,72 @@ class MainWindow(QWidget):
                              Qt.AlignRight, f"{wi * 90}")
 
     # -----------------------------------------------------------------------
+    # Section 5: Wave overlay clipped to a circle
+    # -----------------------------------------------------------------------
+
+    def _draw_wave_in_circle(self, painter: QPainter,
+                             cx: float, cy: float,
+                             inner_r: float, wave_lanes: int = 4) -> None:
+        channels = self._channels_for_note(self._display_note_id())
+        clip     = QPainterPath()
+        clip.addEllipse(QPointF(cx, cy), inner_r, inner_r)
+
+        wave_len = int(inner_r * 2.2)
+        spacing  = max(20, int(inner_r * 0.28))
+        speed    = self.t * 4.0
+        base_amp = max(6, int(inner_r * 0.10)) + int(inner_r * 0.06 * self.wave_amplitude)
+        colors   = [QColor("#ff3a9e"), QColor("#cde70b"),
+                    QColor("#00eaff"), QColor("#ff8500")][:wave_lanes]
+
+        if channels and len(channels) >= wave_lanes:
+            raw_amps = [ch["amplitude"] for ch in channels[:wave_lanes]]
+            max_amp  = max(raw_amps) or 1.0
+            amps     = [a / max_amp for a in raw_amps]
+            wknums   = [0.030 + 0.055 * (ch["frequency_hz"] / 500.0)
+                        for ch in channels[:wave_lanes]]
+            phases   = [math.radians(ch["phase_deg"]) for ch in channels[:wave_lanes]]
+        else:
+            amps   = [1.0] * wave_lanes
+            wknums = [0.055] * wave_lanes
+            phases = [i * math.pi / 2 for i in range(wave_lanes)]
+
+        painter.save()
+        painter.setClipPath(clip)
+
+        for wi in range(wave_lanes):
+            baseline = cy + (wi - (wave_lanes - 1) / 2.0) * spacing
+            amp      = base_amp * amps[wi]
+            ph       = phases[wi]
+            wk       = wknums[wi]
+            col      = colors[wi]
+            x_start  = cx - inner_r * 1.05
+
+            pts = [QPointF(x_start + x,
+                           baseline + math.sin(x * wk + speed + ph) * amp)
+                   for x in range(0, wave_len, 2)]
+
+            glow = QColor(col); glow.setAlpha(28)
+            painter.setPen(QPen(glow, 7, Qt.SolidLine, Qt.RoundCap))
+            for i in range(len(pts) - 1):
+                painter.drawLine(pts[i], pts[i + 1])
+
+            lc = QColor(col); lc.setAlpha(90)
+            painter.setPen(QPen(lc, 2, Qt.SolidLine, Qt.RoundCap))
+            for i in range(len(pts) - 1):
+                painter.drawLine(pts[i], pts[i + 1])
+
+        painter.restore()
+
+    # -----------------------------------------------------------------------
     # Section 5: Selector
     # -----------------------------------------------------------------------
 
     def _draw_selector(self, painter: QPainter,
                        cx: float, cy: float, radius: float) -> None:
-        channels  = _config_channels(self.current_config())
-        avg_amp   = (sum(ch["amplitude"] for ch in channels) / len(channels)
-                     if channels else 1.0)
-        glow_a    = int(45 + 205 * self.wave_amplitude * avg_amp)
-        colors    = self.image_colors if self.using_image_mode() else self.section_colors
-        gc        = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
-        glow      = QRadialGradient(QPointF(cx, cy), radius + 70)
+        glow_a  = int(45 + 205 * self.wave_amplitude)
+        colors  = self.image_colors if self.using_image_mode() else self.section_colors
+        gc      = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
+        glow    = QRadialGradient(QPointF(cx, cy), radius + 70)
         glow.setColorAt(0.45, QColor(0, 0, 0, 0))
         glow.setColorAt(0.76, gc)
         glow.setColorAt(1.0,  QColor(0, 0, 0, 0))
@@ -980,45 +1026,78 @@ class MainWindow(QWidget):
             painter.setPen(QColor("#050505"))
             painter.drawText(QRectF(tx - 36, ty - 28, 72, 56), Qt.AlignCenter, label)
 
-        self._draw_dwell_loader(painter, cx, cy, radius)
+        # _draw_dwell_loader is called in paintEvent AFTER _draw_reference_center
+        # so it renders on top of the center circle, not buried beneath it.
 
     def _draw_dwell_loader(self, painter: QPainter,
                            cx: float, cy: float, radius: float) -> None:
+        """
+        Dwell progress ring drawn in the coloured pie zone (radius * 0.82).
+        Must be called AFTER _draw_reference_center in paintEvent so it is
+        not covered by the center circle overlay.
+        """
         if self.dwell_section < 0 or self.dwell_progress <= 0:
             return
         a    = math.radians(-(self.dwell_section * 60 + 30))
-        tx   = cx + math.cos(a) * radius * 0.66
-        ty   = cy + math.sin(a) * radius * 0.66
-        rect = QRectF(tx - 18, ty - 18, 36, 36)
+        tx   = cx + math.cos(a) * radius * 0.82   # was 0.66 — now in visible ring zone
+        ty   = cy + math.sin(a) * radius * 0.82
+        rect = QRectF(tx - 20, ty - 20, 40, 40)
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(QColor(255, 255, 255, 80), 4, Qt.SolidLine, Qt.RoundCap))
+        painter.setPen(QPen(QColor(255, 255, 255, 60), 5, Qt.SolidLine, Qt.RoundCap))
         painter.drawEllipse(rect)
-        painter.setPen(QPen(QColor("#ffffff"), 4, Qt.SolidLine, Qt.RoundCap))
+        painter.setPen(QPen(QColor("#ffffff"), 5, Qt.SolidLine, Qt.RoundCap))
         painter.drawArc(rect, 90 * 16, int(-360 * 16 * self.dwell_progress))
 
     # -----------------------------------------------------------------------
-    # Section 5: Chladni plate
+    # Section 5: Center image — Spec 1 (live footage default)
     # -----------------------------------------------------------------------
 
     def _draw_reference_center(self, painter: QPainter,
                                 cx: float, cy: float, radius: float) -> None:
+        """Camera feed only. Dark placeholder when no feed active. No wave, no Chladni."""
+        inner_r = radius * 0.86
+        target  = QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2)
+        clip    = QPainterPath()
+        clip.addEllipse(target)
+
+        painter.save()
+        painter.setClipPath(clip)
         if self.center_live_image is not None and not self.center_live_image.isNull():
-            target = QRectF(cx - radius * 0.86, cy - radius * 0.86,
-                            radius * 1.72, radius * 1.72)
             source = self.cover_source_rect(self.center_live_image.width(),
                                             self.center_live_image.height())
-            clip = QPainterPath()
-            clip.addEllipse(target)
-            painter.save()
-            painter.setClipPath(clip)
             painter.drawImage(target, self.center_live_image, source)
-            painter.restore()
         else:
-            self._draw_chladni_plate(painter, cx, cy, radius, 7)
+            painter.fillRect(target, QColor("#0a0b0e"))
+        painter.restore()
+
+    # -----------------------------------------------------------------------
+    # Section 5: Preview disc — Spec 1 (symbol PNG displayed here)
+    # -----------------------------------------------------------------------
 
     def _draw_reference_disc(self, painter: QPainter,
                               cx: float, cy: float, radius: float) -> None:
-        self._draw_chladni_plate(painter, cx, cy, radius, 4)
+        """
+        Spec 1: display symbol PNG from master_symbols.json in this disc.
+        Falls back to the Chladni contour renderer when image is unavailable.
+        """
+        sym_name = self._chladni_id_for_note(self._display_note_id())
+        sym_img  = self._symbol_images.get(sym_name)
+        inner_r  = radius * 0.86
+
+        if sym_img and not sym_img.isNull():
+            target = QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2)
+            source = self.cover_source_rect(sym_img.width(), sym_img.height())
+            clip   = QPainterPath()
+            clip.addEllipse(target)
+            painter.setBrush(QColor("#bf8a47"))
+            painter.setPen(QPen(QColor("#f3cf8d"), max(2, int(radius * 0.03))))
+            painter.drawEllipse(QPointF(cx, cy), radius, radius)
+            painter.save()
+            painter.setClipPath(clip)
+            painter.drawImage(target, sym_img, source)
+            painter.restore()
+        else:
+            self._draw_chladni_plate(painter, cx, cy, radius, 4)
 
     def _draw_chladni_plate(self, painter: QPainter,
                              cx: float, cy: float,
@@ -1161,14 +1240,14 @@ class MainWindow(QWidget):
         painter.setPen(QPen(QColor("white"), 3, Qt.SolidLine, Qt.RoundCap))
         painter.setBrush(QColor(255, 255, 255, 42))
 
-        cx = self.image_btn_rect.center().x()
-        cy = self.image_btn_rect.center().y()
-        painter.drawRoundedRect(QRectF(cx - 18, cy - 2, 36, 24), 8, 8)
+        bx = self.image_btn_rect.center().x()
+        by = self.image_btn_rect.center().y()
+        painter.drawRoundedRect(QRectF(bx - 18, by - 2, 36, 24), 8, 8)
         for i in range(4):
             painter.drawRoundedRect(
-                QRectF(cx - 22 + i * 11, self.image_btn_rect.top() + 16, 10, 24), 5, 5)
-        painter.drawLine(QPointF(cx - 8, cy + 20), QPointF(cx - 18, cy + 10))
-        painter.drawLine(QPointF(cx + 8, cy + 20), QPointF(cx + 18, cy + 10))
+                QRectF(bx - 22 + i * 11, self.image_btn_rect.top() + 16, 10, 24), 5, 5)
+        painter.drawLine(QPointF(bx - 8, by + 20), QPointF(bx - 18, by + 10))
+        painter.drawLine(QPointF(bx + 8, by + 20), QPointF(bx + 18, by + 10))
 
 
 # ===========================================================================
