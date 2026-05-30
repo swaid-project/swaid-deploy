@@ -342,7 +342,7 @@ class MainWindow(QWidget):
         self.dwell_section       = -1
         self.dwell_started_at    = 0.0
         self.dwell_progress      = 0.0
-        self.dwell_duration      = 0.7
+        self.dwell_duration      = 1 # tempo lock utilizador para selecionar nota
         self._dwell_note_id      = 0    # note locked when dwell begins, immune to mode changes
         self._selected_note_id   = 0    # committed note — drives preview/waves, NOT using_image_mode
         self._dwell_armed        = True # cursor must leave ring before the SAME note can re-fire
@@ -428,9 +428,6 @@ class MainWindow(QWidget):
                       f"{self._hb_consecutive_misses} pings without pong")
         self.update()
 
-    # -----------------------------------------------------------------------
-    # Section 4: DAVIDSOUND — dedicated audio routing
-    # -----------------------------------------------------------------------
 
     # -----------------------------------------------------------------------
     # Section 4: Heartbeat
@@ -726,13 +723,13 @@ class MainWindow(QWidget):
         base_radius = min(w, h)
 
         # Layer 1: solid background
-        painter.fillRect(self.rect(), QColor("#020203"))
+        painter.fillRect(self.rect(), QColor("#020203")) #BACKGROUND
 
         # Layer 2: diagonal background wave (deepest visual layer)
         channels = self._channels_for_note(self._display_note_id())
         painter.save()
-        painter.rotate(30)
-        self._draw_wave(painter, 0, 0, length=1200, channels=channels)
+        painter.rotate(31)
+        self._draw_wave(painter, 0, 0, length=2000, channels=channels) #length = 1200 -> original to the main circle MUDAR ATE ONDAS VAI
         painter.restore()
 
         # Layer 3: interactive UI
@@ -915,11 +912,13 @@ class MainWindow(QWidget):
             for i in range(len(pts) - 1):
                 painter.drawLine(pts[i], pts[i + 1])
 
-            mx = (self.t * 68 + wi * 36) % length
-            my = baseline + math.sin(mx * wk + speed + ph) * amp
+            dot_offsets = (0.0, length / 3.0, 2.0 * length / 3.0)
             painter.setBrush(col)
             painter.setPen(QPen(QColor("#ffffff"), 2))
-            painter.drawEllipse(QPointF(x0 + mx, my), 6, 6)
+            for offset in dot_offsets:
+                mx = (self.t * 68 + wi * 36 + offset) % length
+                my = baseline + math.sin(mx * wk + speed + ph) * amp
+                painter.drawEllipse(QPointF(x0 + mx, my), 6, 6)
 
             painter.setPen(QColor(255, 255, 255, 170))
             painter.setFont(QFont("Arial", 10, QFont.Bold))
