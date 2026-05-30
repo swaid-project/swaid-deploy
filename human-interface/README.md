@@ -57,7 +57,7 @@ python main.py
 
 | Gesto | Ação |
 |-------|------|
-| Dedo indicador direito sobre um sector | Seleciona o sector após 0,7 s (dwell) |
+| Dedo indicador direito sobre um sector | Seleciona o sector após 1 s (dwell) |
 | Mão esquerda fechada (segurar) | Ativa o modo ♯ e muda para o conjunto de notas alternativo |
 
 ---
@@ -67,7 +67,7 @@ python main.py
 ```
 SWAID-ESIS/
 ├── assets/
-│   └── LogoFeup.tif          # Logótipo FEUP (TIFF CMYK)
+│   └── LogoFeup.pdf          # Logótipo FEUP
 ├── models/
 │   └── hand_landmarker.task   # Modelo MediaPipe (não incluído no git)
 ├── hand_tracking.py           # Constantes de câmera e demo standalone
