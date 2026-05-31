@@ -10,19 +10,14 @@
 #include <iomanip> 
 #include <thread>
 #include <unistd.h>
+#include <unordered_map>
 
 // --- JSON related
-#include <map>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-// --- 7.1 characteristics
-extern const int NUM_CHANNELS   ; 
-extern const int NUM_GENERATORS ; 
-extern const int NUM_TRANSDUCERS;
-
-// --- 7.1 channels
-extern const char* CH_LABEL[];
+// --- Audio related
+#include <portaudio.h>
 
 // --- Data Structures 
 struct Generator {
@@ -33,24 +28,43 @@ struct Generator {
     double currentBasePhase = 0.0;
 };
 
-// --- Audio related
-#include <portaudio.h>
+struct AudioRouting {
+    std::vector<int> music_channels;
+    std::unordered_map<int, int> logical_to_physical_transducer;
+};
+
+struct SystemConfig {
+    AudioRouting routing;
+    std::string zmq_endpoint;
+    int pico_baud_rate;
+    std::string pd_patch_path;
+};
+
+// --- System constants
+extern const int NUM_CHANNELS; 
+extern const int NUM_GENERATORS; 
 
 // --- Global state 
 extern std::vector<Generator> generators;
+extern SystemConfig systemConfig;
 extern std::atomic<double> measuredLatency; 
 extern std::atomic<bool> headsetMode; 
-extern std::atomic<bool> masterMute; 
+extern std::atomic<bool> masterMute;
+extern std::atomic<bool> musicMute;
+extern std::atomic<float> musicVolL;
+extern std::atomic<float> musicVolR;
 
 // --- Constants 
 extern const double PI;
-extern const int SAMPLE_RATE;
+extern int SAMPLE_RATE;
 extern const int FRAMES_PER_BUFFER;
+
+// --- Config loading
+bool loadSystemConfig(const std::string& path);
 
 // --- Duration for the amplitude for fade
 int fadeDurationMs(const std::string& t);
 
-#include <unordered_map>
 // --- Sending the pattern to the soundcard generators
 void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition, int vol_l = 100, int vol_r = 100);
 
@@ -69,10 +83,3 @@ int audioCallback(const void *inputBuffer,
 int selectAudioDevice();
 
 #endif
-
-
-                         
-
-
-
-

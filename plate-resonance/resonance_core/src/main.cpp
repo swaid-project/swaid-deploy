@@ -3,6 +3,13 @@
 #include "../../led_driver/include/embedded_sal.hpp"
 
 int main() {
+    // Load System Configuration
+    if (!loadSystemConfig("../system_config.json")) {
+        std::cerr << "FATAL: Could not load system_config.json\n";
+        // Fallback to defaults or exit
+        systemConfig.zmq_endpoint = "ipc:///tmp/swaid.sock";
+    }
+
     Pa_Initialize();
     PaStream *stream;
     

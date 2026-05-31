@@ -1,0 +1,17 @@
+{
+    "audio_routing": {
+        "sample_rate": 48000,
+        "music_channels": [1, 2],
+        "transducer_channels": {
+            "logical_1": 5,
+            "logical_2": 6,
+            "logical_3": 7,
+            "logical_4": 8
+        }
+    },
+    "communication": {
+        "zmq_endpoint": "ipc:///tmp/swaid.sock",
+        "pico_baud_rate": 9600,
+        "pd_patch_path": "../MusicSynthesis"
+    }
+}

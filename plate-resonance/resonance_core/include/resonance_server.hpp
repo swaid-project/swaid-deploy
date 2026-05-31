@@ -22,11 +22,8 @@ using json = nlohmann::json;
 #include <limits>
 #include <zmq.hpp>
 
-// --- PureData Communication
-#include <puredata_sender.hpp>
-
 // --- Embedded SAL Communication
-#include "../../led_driver/include/embedded_sal.hpp"
+#include <embedded_sal.hpp>
 
 extern const char* CATALOGUE_PATH;   
 extern const char* ZMQ_ENDPOINT;
@@ -34,13 +31,16 @@ extern const char* ZMQ_ENDPOINT;
 extern std::atomic<bool> jsonLive;
 extern std::atomic<long long> lastHeartbeat;
 
-// --- Loading file into a map memory
-std::unordered_map<std::string, json> loadCatalogue(const std::string& file);
+// --- Global catalogue maps
+extern std::unordered_map<std::string, json> catalogue;
+extern std::unordered_map<int, std::string> musicNoteMap;
+
+// --- Loading file into map memory
+void populateMaps(const std::string& file);
 
 // --- Hearing the SDK connection
 void jsonListenerThread();
 
-extern PureDataSender pdSender;
 extern EmbeddedSAL ledDriver;
 
 // --- Official interface
