@@ -1,13 +1,6 @@
 #include "../include/resonance_server.hpp"
 #include "../../soundcard/include/audio_driver.hpp"
 #include "../../led_driver/include/embedded_sal.hpp"
-#include "../../soundcard/include/audio_driver.hpp"
-
-#ifdef DEBUG
-    #include "imgui.h"
-    #include "backends/imgui_impl_glfw.h"
-    #include "backends/imgui_impl_opengl3.h"
-#endif // DEBUG
 
 int main() {
     Pa_Initialize();

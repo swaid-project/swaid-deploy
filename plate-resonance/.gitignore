@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+bin/
+lib/
+_deps/
+
+# Dependencies
+third_party/
+
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.patch
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# PlatformIO
+.pio/

@@ -2,34 +2,8 @@
 #include "../../soundcard/include/audio_driver.hpp"
 #include "../../led_driver/include/embedded_sal.hpp"
 
-// Global LED Driver instance
-EmbeddedSAL ledDriver;
-
-// PureData Sender Instance
-PureDataSender pdSender;
-
 // Failsafe state
 std::atomic<long long> lastHeartbeat{0};
-
-// --- PureDataSender Implementation
-bool PureDataSender::init(const std::string& ip, int port) {
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        std::cerr << "PureData UDP socket creation failed\n";
-        return false;
-    }
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(port);
-    servaddr.sin_addr.s_addr = inet_addr(ip.c_str());
-    std::cout << "PureData Native UDP initialized on " << ip << ":" << port << "\n";
-    return true;
-}
-
-void PureDataSender::sendNote(int note) {
-    if (sockfd < 0) return;
-    std::string msg = std::to_string(note) + ";\n"; // FUDI protocol
-    sendto(sockfd, msg.c_str(), msg.length(), 0, (const struct sockaddr *)&servaddr, sizeof(servaddr));
-}
 
 // --- Loading file into a map memory
 std::unordered_map<std::string, json> loadCatalogue(const std::string& file) {

@@ -12,8 +12,6 @@
 #include <unordered_map>
 
 // --- JSON related
-#include <map>          
-#include <sys/inotify.h>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 #include <fstream>
@@ -24,10 +22,11 @@ using json = nlohmann::json;
 #include <limits>
 #include <zmq.hpp>
 
-// --- Native Networking for PureData
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+// --- PureData Communication
+#include <puredata_sender.hpp>
+
+// --- Embedded SAL Communication
+#include "../../led_driver/include/embedded_sal.hpp"
 
 extern const char* CATALOGUE_PATH;   
 extern const char* ZMQ_ENDPOINT;
@@ -41,21 +40,8 @@ std::unordered_map<std::string, json> loadCatalogue(const std::string& file);
 // --- Hearing the SDK connection
 void jsonListenerThread();
 
-// --- PureData Native UDP Dispatcher
-class PureDataSender {
-public:
-    PureDataSender() : sockfd(-1) {}
-    ~PureDataSender() { if (sockfd != -1) close(sockfd); }
-    
-    bool init(const std::string& ip, int port);
-    void sendNote(int note);
-
-private:
-    int sockfd;
-    struct sockaddr_in servaddr;
-};
-
 extern PureDataSender pdSender;
+extern EmbeddedSAL ledDriver;
 
 // --- Official interface
 void runHeadless();
