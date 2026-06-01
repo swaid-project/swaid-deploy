@@ -22,6 +22,7 @@ std::unordered_map<int, std::string> musicNoteMap;
 
 // Global tracker for current note to prevent spam
 static int current_playing_note = -1;
+static std::string current_active_chladni = "NONE";
 
 /**
  * @brief Simple receiver for libpd messages.
@@ -29,7 +30,7 @@ static int current_playing_note = -1;
  * NEVER perform blocking I/O here.
  */
 void pd_float_hook(const char *source, float value) {
-    if (std::string(source) == "to_core") {
+    if (source && strcmp(source, "to_core") == 0) {
         int note = static_cast<int>(value);
         
         // SAFETY NET: Only execute if the note actually changed
@@ -39,6 +40,8 @@ void pd_float_hook(const char *source, float value) {
             // 1. Update Transducers (Safe atomic update)
             if (musicNoteMap.count(note)) {
                 std::string chladni_id = musicNoteMap[note];
+                current_active_chladni = chladni_id;
+
                 if (catalogue.count(chladni_id)) {
                     auto& pattern = catalogue[chladni_id];
                     if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
@@ -61,6 +64,8 @@ void pd_float_hook(const char *source, float value) {
                         }
                     }
                 }
+            } else {
+                current_active_chladni = "UNKNOWN";
             }
             
             // 2. Queue LED update (Safe lock-free push)
@@ -76,14 +81,60 @@ void hardwareWorkerThread() {
         auto effectId = ledQueue.pop();
         if (effectId.has_value()) {
             if (ledDriver.isConnected()) {
-                ledDriver.sendEffect(effectId.value());
+                // If sendEffect fails, we've lost the hardware
+                if (!ledDriver.sendEffect(effectId.value())) {
+                    std::cerr << "[Hardware Worker] Serial write failed. Entering recovery...\n";
+                    diag_pico_serial.store(0);
+                    ledDriver.disconnect();
+                } else {
+                    diag_pico_serial.store(1);
+                }
+            } else {
+                // Not connected, try to reconnect
+                diag_pico_serial.store(0);
+                if (ledDriver.connect()) {
+                    std::cout << "[Hardware Worker] Pico reconnected.\n";
+                    diag_pico_serial.store(1);
+                    // Re-send the effect that failed
+                    ledDriver.sendEffect(effectId.value());
+                } else {
+                    // Wait before retrying to avoid CPU spam
+                    std::this_thread::sleep_for(std::chrono::seconds(2));
+                    // Re-push the effect to the queue so it's not lost
+                    ledQueue.push(effectId.value());
+                }
             }
         } else {
-            // No updates, sleep for a bit to avoid CPU hogging
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // No updates, check connection if we were disconnected
+            if (!ledDriver.isConnected()) {
+                diag_pico_serial.store(0);
+                if (ledDriver.connect()) {
+                    diag_pico_serial.store(1);
+                }
+            } else {
+                diag_pico_serial.store(1);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
     std::cout << "[Hardware Worker] Thread stopping.\n";
+}
+
+// --- Diagnostic Helper
+json build_full_reply(const std::string& status) {
+    json r;
+    r["status"] = status;
+
+    // Diagnostics
+    r["diagnostics"]["pico_serial"] = diag_pico_serial.load();
+    r["diagnostics"]["usb_audio"]   = diag_usb_audio.load();
+    r["diagnostics"]["hdmi_audio"]  = diag_hdmi_audio.load();
+
+    // Active State (Piggybacking)
+    r["active_state"]["current_note"] = current_playing_note;
+    r["active_state"]["current_chladni_id"] = current_active_chladni;
+    
+    return r;
 }
 
 // Failsafe state
@@ -149,8 +200,10 @@ void jsonListenerThread() {
     // Try to connect to LEDs
     if (ledDriver.connect()) {
         std::cout << "LED Driver connected successfully.\n";
+        diag_pico_serial.store(1);
     } else {
         std::cerr << "LED Driver connection failed (Pico not found).\n";
+        diag_pico_serial.store(0);
     }
  
     zmq::context_t context(1);
@@ -207,7 +260,8 @@ void jsonListenerThread() {
 
         if (type == "ping") {
             lastHeartbeat.store(now);
-            rep_socket.send(zmq::str_buffer("{\"status\": \"pong\"}"), zmq::send_flags::none);
+            std::string reply_str = build_full_reply("pong").dump();
+            rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
             continue;
         }
 
@@ -216,7 +270,6 @@ void jsonListenerThread() {
             int music_note = message["music_note"].get<int>();
             int led_effect = message["led_effect_id"].get<int>();
 
-            // Standardized volume parameters (0-100)
             int vol_l = 100;
             int vol_r = 100;
             if (message.contains("vol_l")) vol_l = message["vol_l"].get<int>();
@@ -225,16 +278,12 @@ void jsonListenerThread() {
             std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect 
                       << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
 
-            // 1. Dispatch Root Note to libpd (Musical Brain)
             libpd_float("from_core", (float)music_note);
-
-            // 2. Queue Initial LED update (Standardize to the requested effect)
             ledQueue.push(led_effect);
-
-            // 3. Apply Chladni Pattern (Transducers)
             applyPattern(catalogue, chladni_id, vol_l, vol_r);
 
-            rep_socket.send(zmq::str_buffer("{\"status\": \"ok\"}"), zmq::send_flags::none);
+            std::string reply_str = build_full_reply("ok").dump();
+            rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         } 
         else if (type == "manual_audio") {
             int ch = message["command"]["channel"].get<int>();
@@ -246,12 +295,14 @@ void jsonListenerThread() {
                 if (message["command"].contains("phase_deg"))
                     generators[ch].phaseDeg.store(message["command"]["phase_deg"].get<float>());
             }
-            rep_socket.send(zmq::str_buffer("{\"status\": \"ok\"}"), zmq::send_flags::none);
+            std::string reply_str = build_full_reply("ok").dump();
+            rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         }
         else if (type == "manual_led") {
             int ledId = message["command"]["led_effect"].get<int>();
-            ledDriver.sendEffect(ledId);
-            rep_socket.send(zmq::str_buffer("{\"status\": \"ok\"}"), zmq::send_flags::none);
+            ledQueue.push(ledId);
+            std::string reply_str = build_full_reply("ok").dump();
+            rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         }
         else if (type == "channel_state") {
             if (message["command"].contains("transducer_mute")) {
@@ -261,37 +312,15 @@ void jsonListenerThread() {
                 bool mute = message["command"]["music_mute"].get<bool>();
                 musicMute.store(mute);
                 if (mute) {
-                    // Send stop signal (-1) to libpd sequencer
                     libpd_float("from_core", -1.0f);
                 }
             }
-            rep_socket.send(zmq::str_buffer("{\"status\": \"ok\"}"), zmq::send_flags::none);
+            std::string reply_str = build_full_reply("ok").dump();
+            rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         }
         else {
             rep_socket.send(zmq::str_buffer("{\"status\": \"unknown_command\"}"), zmq::send_flags::none);
         }
 	}
     ledDriver.disconnect();
-}
-
-void runHeadless() {
-    std::cout << "\n--- Headless Mode Activated (Server Mode) ---\n";
-    if (!jsonLive.load()) {
-        jsonLive.store(true);
-        
-        // Start Hardware Worker
-        hardwareWorkerRunning.store(true);
-        hardwareWorker = std::thread(hardwareWorkerThread);
-
-        std::thread listener(jsonListenerThread);
-        std::cout << "ZeroMQ Server started. Press Ctrl+C to terminate.\n";
-        while (jsonLive.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
-
-        // Cleanup
-        hardwareWorkerRunning.store(false);
-        if (hardwareWorker.joinable()) hardwareWorker.join();
-        if (listener.joinable()) listener.join();
-    }
 }

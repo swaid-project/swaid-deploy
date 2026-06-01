@@ -60,6 +60,11 @@ extern std::atomic<float> musicVolR;
 extern std::atomic<int> transducerDeviceIdx;
 extern std::atomic<int> musicDeviceIdx;
 
+// Diagnostic state (1 = OK, 0 = Lost/Polling)
+extern std::atomic<int> diag_pico_serial;
+extern std::atomic<int> diag_usb_audio;
+extern std::atomic<int> diag_hdmi_audio;
+
 // --- Constants 
 extern const double PI;
 extern int SAMPLE_RATE;

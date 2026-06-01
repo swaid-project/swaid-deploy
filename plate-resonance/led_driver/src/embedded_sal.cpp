@@ -31,7 +31,7 @@ EmbeddedSAL::~EmbeddedSAL() {
 bool EmbeddedSAL::connect() {
     int fd = findPicoPort();
     if (fd < 0) {
-        std::cerr << "[LED SAL] Pico not found on any known serial port.\n";
+        // std::cerr << "[LED SAL] Pico not found on any known serial port.\n";
         return false;
     }
 
@@ -80,16 +80,19 @@ int EmbeddedSAL::getCurrentEffect() const {
 // sendEffect() — envia FX:<n> ao Pico
 // ============================================================
 
-void EmbeddedSAL::sendEffect(int fx_id) {
-    if (fx_id < 0 || fx_id >= TOTAL_LED_EFFECTS) return;
+bool EmbeddedSAL::sendEffect(int fx_id) {
+    if (fx_id < 0 || fx_id >= TOTAL_LED_EFFECTS) return true;
 
     // Não envia se já estiver no efeito correto
-    if (current_effect_.load() == fx_id) return;
+    if (current_effect_.load() == fx_id) return true;
 
     std::string cmd = "FX:" + std::to_string(fx_id);
-    sendCommand(cmd.c_str());
-    current_effect_.store(fx_id);
-    std::cout << "[LED SAL] Sent FX:" << fx_id << "\n";
+    if (sendCommand(cmd.c_str())) {
+        current_effect_.store(fx_id);
+        std::cout << "[LED SAL] Sent FX:" << fx_id << "\n";
+        return true;
+    }
+    return false;
 }
 
 // ============================================================
@@ -166,18 +169,19 @@ bool EmbeddedSAL::configureSerialPort(int fd) {
 // sendCommand() — escreve "cmd\n" e garante transmissão via USB
 // ============================================================
 
-void EmbeddedSAL::sendCommand(const char* cmd) {
+bool EmbeddedSAL::sendCommand(const char* cmd) {
     int fd = fd_.load();
-    if (fd < 0) return;
+    if (fd < 0) return false;
 
     std::string msg = std::string(cmd) + "\n";
     ssize_t w = write(fd, msg.c_str(), msg.length());
 
     if (w < 0) {
         std::cerr << "[LED SAL] write error: " << strerror(errno) << "\n";
-        return;
+        return false;
     }
 
     // Garante que o comando é de facto transmitido pelo USB antes de continuar
     tcdrain(fd);
+    return true;
 }

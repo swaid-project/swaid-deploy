@@ -29,7 +29,8 @@ public:
     bool isConnected() const;
 
     // Envia "FX:<fx_id>\n" ao Pico. Ignora se já estiver no efeito.
-    void sendEffect(int fx_id);
+    // Retorna true se enviado com sucesso, false se erro de I/O.
+    bool sendEffect(int fx_id);
 
     int getCurrentEffect() const;
 
@@ -39,5 +40,5 @@ private:
 
     int  findPicoPort();
     bool configureSerialPort(int fd);
-    void sendCommand(const char* cmd);
+    bool sendCommand(const char* cmd);
 };

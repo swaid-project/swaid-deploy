@@ -23,6 +23,10 @@ std::atomic<float> musicVolR{1.0f};
 std::atomic<int> transducerDeviceIdx{-1};
 std::atomic<int> musicDeviceIdx{-1};
 
+std::atomic<int> diag_pico_serial{0};
+std::atomic<int> diag_usb_audio{0};
+std::atomic<int> diag_hdmi_audio{0};
+
 const int NUM_CHANNELS    = 8; 
 const int NUM_GENERATORS  = 8; 
 

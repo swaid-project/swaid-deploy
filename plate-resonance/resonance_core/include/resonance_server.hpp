@@ -39,9 +39,9 @@ extern std::unordered_map<int, std::string> musicNoteMap;
 void populateMaps(const std::string& file);
 
 // --- Hearing the SDK connection
+extern std::atomic<bool> hardwareWorkerRunning;
+void hardwareWorkerThread();
+
 void jsonListenerThread();
 
 extern EmbeddedSAL ledDriver;
-
-// --- Official interface
-void runHeadless();

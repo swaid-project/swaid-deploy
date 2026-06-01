@@ -1,34 +1,23 @@
-# LED Driver
+# LED Driver (Embedded SAL)
 
-Firmware for controlling the LED feedback system on the SWAID Plate.
+Resilient Serial bridge for the SWAID visual feedback system.
 
-## Repository Structure
+## Role
+Manages USB-Serial communication between the C++ Core and the Raspberry Pi Pico driving the NeoPixel strip.
 
-- `include/`: Header files (`embedded_sal.hpp`)
-- `src/`: Implementation files (`embedded_sal.cpp`, `.ino` files)
-- `test/`: Python-based testing scripts (`test_pico_led.py`)
-- `third_party/`: Local dependencies managed by setup script
-- `build/`: Compiled binaries and build artifacts
+## Features
 
-## Build Environment
+- **Asynchronous Execution**: Designed to be called by a background worker thread (`Thread 3`) to ensure Serial latency never blocks the audio engine.
+- **Self-Healing Loop**: If the USB cable is bumped or the Pico resets, the driver detects the `write()` failure, closes the port, and infinitely polls for a new link every 2 seconds.
+- **Auto-Discovery**: Scans `/dev/ttyACM*` and `/dev/ttyUSB*` automatically.
+- **FUDI-Lite Protocol**: ASCII based. Sends `FX:<id>\n`.
 
-This module is designed for the Raspberry Pi Pico and can be built using either CMake or PlatformIO.
+## Pico Firmware
+The `src/*.ino` files contain the Arduino-based firmware for the Pico. It implements:
+- Smooth cross-fading between effects.
+- **Perceptual Gamma Correction**: Ensures LED brightness appears linear to the human eye.
 
-### 1. Fetch Dependencies
-Initialize the local environment by running the setup script:
-```bash
-./setup_dependencies.sh
-```
-
-### 2. Compilation (CMake)
-```bash
-cd build
-cmake ..
-make
-```
-
-### 3. Compilation (PlatformIO)
-If you prefer PlatformIO:
-```bash
-pio run
-```
+## contents
+- `include/embedded_sal.hpp`: Class definition with error trapping.
+- `src/embedded_sal.cpp`: Resilient I/O implementation.
+- `test/test_pico_led.py`: Direct debug utility.

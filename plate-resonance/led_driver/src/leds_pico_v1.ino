@@ -41,11 +41,7 @@ inline uint8_t applyGamma(uint8_t v) {
 // Multiplica cor por fator percetual (0.0–1.0)
 // Converte o fator linear → índice gamma → aplica
 uint32_t corComFadePercetual(uint32_t cor, float fator) {
-  // fator linear → índice na tabela gamma (inverso)
-  // Usamos fator^(1/2.2) ≈ fator^0.4545 para compensar
-  // De forma simples: mapeamos fator para 0–255 e usamos a tabela ao contrário
   uint8_t idx = constrain((int)(fator * 255.0f), 0, 255);
-  // gamma22[idx] dá-nos o brilho percetualmente correto
   float mult = gamma22[idx] / 255.0f;
   uint8_t r = ((cor >> 16) & 0xFF) * mult;
   uint8_t g = ((cor >>  8) & 0xFF) * mult;
@@ -62,9 +58,6 @@ uint16_t serpHue = 0;
 
 Adafruit_NeoPixel fita = Adafruit_NeoPixel(NUMPIXELS, PIN_FITA, NEO_GRB + NEO_KHZ800);
 
-// Buffer de trabalho — os efeitos escrevem aqui.
-// Só depois de renderizar completamente é que fazemos show().
-// Isto elimina o flash: nunca mostramos um frame a meio.
 uint32_t bufferRender[NUMPIXELS];
 
 int efeitoAtual = 0;
@@ -92,17 +85,11 @@ uint8_t fadeSnapshot[NUMPIXELS][3];
 enum EstadoFade { NORMAL, FADE_OUT, FADE_IN };
 EstadoFade estadoFade = NORMAL;
 
-// fadeValor vai de 0.0 a 1.0 (linear internamente).
-// A conversão percetual acontece em aplicarFadePercetual().
 float fadeValor = 1.0f;
-
-// Velocidade do fade: 0.07 por frame a 25ms ≈ ~360ms total
-// Podes aumentar para fade mais rápido, diminuir para mais lento.
 const float FADE_STEP = 0.07f;
 
 int efeitoProximo = -1;
 
-// Guarda snapshot do frame atual
 void tirarSnapshot() {
   for (int i = 0; i < NUMPIXELS; i++) {
     uint32_t c = fita.getPixelColor(i);
@@ -112,7 +99,6 @@ void tirarSnapshot() {
   }
 }
 
-// Aplica snapshot com fade percetual
 void aplicarSnapshotComFade(float fatorLinear) {
   uint8_t idx = constrain((int)(fatorLinear * 255.0f), 0, 255);
   float mult = gamma22[idx] / 255.0f;
@@ -125,7 +111,6 @@ void aplicarSnapshotComFade(float fatorLinear) {
   }
 }
 
-// Aplica brilho global percetual ao buffer atual
 void aplicarBrilhoGlobal(float fatorLinear) {
   uint8_t idx = constrain((int)(fatorLinear * 255.0f), 0, 255);
   float mult = gamma22[idx] / 255.0f;
@@ -143,8 +128,6 @@ void aplicarBrilhoGlobal(float fatorLinear) {
 }
 
 void iniciarTransicao(int novoEfeito) {
-  // Tira snapshot ANTES de qualquer mudança de estado.
-  // Assim o fade out parte sempre de um frame limpo.
   tirarSnapshot();
   efeitoProximo = novoEfeito;
   fadeValor = 1.0f;
@@ -263,6 +246,20 @@ void loop() {
 
     } else if (cmd == "PING") {
       Serial.println("PONG");
+
+    // --- NOVO COMANDO: SELECIONAR EFEITO DIRETAMENTE ---
+    } else if (cmd.startsWith("FX:")) {
+      int fxId = cmd.substring(3).toInt();
+      if (fxId >= 0 && fxId < totalEfeitos) {
+        iniciarTransicao(fxId);
+        // Só atualizamos o efeitoAtual de forma imediata na lógica de fade depois,
+        // mas marcamos a intenção de transição aqui.
+        piscarLED();
+        Serial.print("ok:FX:");
+        Serial.println(fxId);
+      } else {
+        Serial.println("err:FX:out_of_range");
+      }
     }
   }
 
@@ -281,22 +278,17 @@ void loop() {
       fadeValor -= FADE_STEP;
 
       if (fadeValor <= 0.0f) {
-        // Chegou a 0 → apaga completamente antes de mudar
-        // Isto evita o flash: garantimos que a fita está mesmo apagada
         fita.clear();
         fita.show();
 
-        // Agora muda de efeito e reseta estado
         efeitoAtual = efeitoProximo;
         resetEfeito();
 
-        // Gera o primeiro frame do novo efeito (ainda não mostramos)
         correrEfeito(efeitoAtual, tempoAtual);
-        tirarSnapshot(); // guarda para o fade in
+        tirarSnapshot(); 
 
         fadeValor = 0.0f;
         estadoFade = FADE_IN;
-        // Não chamamos show() aqui — o fade in trata disso no próximo tick
 
       } else {
         aplicarSnapshotComFade(fadeValor);
@@ -306,20 +298,17 @@ void loop() {
     } else if (estadoFade == FADE_IN) {
       fadeValor += FADE_STEP;
 
-      // Renderiza o efeito e aplica fade in percetual por cima
       correrEfeito(efeitoAtual, tempoAtual);
 
       if (fadeValor >= 1.0f) {
         fadeValor = 1.0f;
         estadoFade = NORMAL;
-        // Frame completo sem fade
       } else {
         aplicarBrilhoGlobal(fadeValor);
       }
       fita.show();
 
     } else {
-      // NORMAL: corre o efeito direto
       correrEfeito(efeitoAtual, tempoAtual);
       fita.show();
     }
@@ -328,9 +317,6 @@ void loop() {
 
 // ==========================================
 // FUNÇÃO AUXILIAR
-// escurecerFita com gamma percetual:
-// usa a mesma tabela para que o escurecimento
-// gradual (trail dos efeitos) também pareça linear
 // ==========================================
 void escurecerFita(uint8_t taxa) {
   for(int i = 0; i < NUMPIXELS; i++) {
@@ -338,7 +324,6 @@ void escurecerFita(uint8_t taxa) {
     int r = (cor >> 16) & 0xFF;
     int g = (cor >>  8) & 0xFF;
     int b = cor & 0xFF;
-    // Aplica gamma inverso antes de subtrair para trail mais natural
     r = (r > taxa) ? r - taxa : 0;
     g = (g > taxa) ? g - taxa : 0;
     b = (b > taxa) ? b - taxa : 0;
@@ -371,10 +356,8 @@ void scannerCylon() {
 }
 
 void respiracaoOceano(unsigned long tempo) {
-  // Curva de respiração com gamma percetual aplicado ao brilho
   float onda = (exp(sin(tempo / 1500.0 * PI)) - 0.36787944f) * 108.0f;
   uint8_t brilhoLinear = constrain((int)onda, 0, 255);
-  // Aplica gamma para que a transição brilhante→escuro pareça uniforme
   uint8_t brilhoCor = applyGamma(brilhoLinear);
   uint32_t cor = fita.Color(0, brilhoCor, brilhoCor);
   for(int i = 0; i < NUMPIXELS; i++) fita.setPixelColor(i, cor);
@@ -389,7 +372,6 @@ void auroraBorealis(unsigned long tempo) {
     int verde  = constrain(mix * 200 * sin(x * 2 + tempo / 2000.0), 0, 255);
     int roxo   = constrain(mix * 180 * sin(x * 3 - tempo / 1500.0 + 2), 0, 255);
     int brilho = constrain(mix * 255, 0, 255);
-    // Gamma nos canais individuais para transições mais suaves
     fita.setPixelColor(i, fita.Color(
       applyGamma(constrain(roxo * 0.6, 0, 255)),
       applyGamma(constrain(verde + roxo * 0.2, 0, 255)),
@@ -442,7 +424,6 @@ void serpenteCromatica() {
   for (int j = 0; j < serpLen; j++) {
     int idx = posicaoAtual - direcao * j;
     if (idx < 0 || idx >= NUMPIXELS) continue;
-    // Gamma aplicado ao brilho do trail para fade mais natural
     float brightLinear = 1.0 - (float)j / serpLen;
     uint8_t brightGamma = applyGamma((uint8_t)(brightLinear * 255));
     fita.setPixelColor(idx, fita.gamma32(fita.ColorHSV(serpHue + j * 300, 255, brightGamma)));
@@ -490,7 +471,6 @@ void agua(unsigned long tempo) {
     float onda  = sin((float)i / 8.0 - tempo / 300.0) * 0.5 + 0.5;
     float onda2 = sin((float)i / 5.0 + tempo / 500.0) * 0.3 + 0.3;
     float mix = (onda + onda2) / 2.0;
-    // Gamma nos valores para que a água tenha transições suaves
     uint8_t azul  = applyGamma(constrain(mix * 255, 80, 255));
     uint8_t verde = applyGamma(constrain(mix * 160, 20, 160));
     fita.setPixelColor(i, fita.Color(0, verde, azul));
@@ -554,7 +534,6 @@ void galaxia() {
   for (int i = 0; i < NUMPIXELS; i++) {
     if (estrelasDir[i]) { estrelas[i] += 3; if (estrelas[i] >= 220) estrelasDir[i] = 0; }
     else                { estrelas[i] -= 3; if (estrelas[i] <= 10)  estrelasDir[i] = 1; }
-    // Gamma nas estrelas para twinkle mais natural
     uint8_t s = applyGamma(estrelas[i]);
     uint8_t nebula_r = s / 4;
     uint8_t nebula_b = s / 2;
@@ -565,7 +544,6 @@ void galaxia() {
 
 void neon() {
   uint16_t coresNeon[3] = {0, 21845, 43690};
-  // Pulso com gamma para que o fade do pulso pareça linear ao olho
   float pulsoLinear = (sin(millis() / 200.0) * 0.4) + 0.6;
   uint8_t pulsoGamma = applyGamma((uint8_t)(pulsoLinear * 255));
   float mult = pulsoGamma / 255.0f;
@@ -584,7 +562,6 @@ void neveiro(unsigned long tempo) {
     float onda = sin(x * 5.0 + tempo / 2000.0) * 0.3
                + sin(x * 9.0 - tempo / 1500.0) * 0.2
                + 0.5;
-    // Gamma no brilho do neveiro para transições muito suaves
     uint8_t brilhoGamma = applyGamma(constrain(onda * 180, 30, 210));
     fita.setPixelColor(i, fita.Color(
       brilhoGamma * 0.85,
