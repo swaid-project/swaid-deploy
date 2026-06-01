@@ -1,6 +1,7 @@
 #include "../include/audio_driver.hpp"
 #include <fstream>
 #include <algorithm>
+#include <vector>
 
 // libpd
 #include "z_libpd.h"
@@ -26,6 +27,8 @@ bool loadSystemConfig(const std::string& path) {
         if (j["audio_routing"].contains("sample_rate"))
             SAMPLE_RATE = j["audio_routing"]["sample_rate"].get<int>();
 
+        systemConfig.routing.transducer_device_name = j["audio_routing"]["transducer_device_name"].get<std::string>();
+        systemConfig.routing.music_device_name = j["audio_routing"]["music_device_name"].get<std::string>();
         systemConfig.routing.music_channels = j["audio_routing"]["music_channels"].get<std::vector<int>>();
         
         auto transducers = j["audio_routing"]["transducer_channels"];
@@ -42,13 +45,28 @@ bool loadSystemConfig(const std::string& path) {
     }
 }
 
-int fadeDurationMs(const std::string& t) {
-    if (t == "FAST") return 100;
-    if (t == "MEDIUM") return 300;
-    return 500;
+int findAudioDeviceByName(const std::string& nameSubstr) {
+    int numDevices = Pa_GetDeviceCount();
+    if (numDevices < 0) {
+        std::cerr << "[Audio] PortAudio error: " << Pa_GetErrorText(numDevices) << "\n";
+        return -1;
+    }
+
+    for (int i = 0; i < numDevices; i++) {
+        const PaDeviceInfo* info = Pa_GetDeviceInfo(i);
+        if (!info) continue;
+        
+        std::string deviceName = info->name;
+        if (deviceName.find(nameSubstr) != std::string::npos) {
+            std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << ")\n";
+            return i;
+        }
+    }
+
+    return -1;
 }
 
-void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition, int vol_l, int vol_r) {
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l, int vol_r) {
     auto it = catalogue.find(symbol_id);
     if (it == catalogue.end()) {
         std::cerr << "Pattern '" << symbol_id << "' not found.\n";
@@ -63,46 +81,39 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
     for (int i = 0; i < NUM_GENERATORS; i++)
         fromAmps[i] = generators[i].amp.load();
  
-    // Normalized multipliers
+    // Normalized multipliers for music (PD)
     float normL = std::clamp(vol_l, 0, 100) / 100.0f;
     float normR = std::clamp(vol_r, 0, 100) / 100.0f;
-    
-    // Update global music volumes for the callback
     musicVolL.store(normL);
     musicVolR.store(normR);
 
     if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
         for (const auto& t : pattern["hardware_config"]["channels"]) {
             int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
-            
-            // Fallback to legacy "channel" if logical_transducer is missing
             if (logical == -1 && t.contains("channel")) logical = t["channel"].get<int>();
 
             if (systemConfig.routing.logical_to_physical_transducer.count(logical)) {
                 int physical = systemConfig.routing.logical_to_physical_transducer[logical];
-                int idx = physical - 1; // 0-based internal index
+                int idx = physical - 1; 
 
                 if (idx < 0 || idx >= NUM_GENERATORS) continue;
 
                 float baseAmp = t["amplitude"].get<float>();
-                // In transducers, we don't apply vol_l/r as standard, 
-                // but we could if we wanted side-specific control.
-                float targetAmp = baseAmp; 
-
                 generators[idx].freq.store(t["frequency_hz"].get<float>());
                 if (t.contains("phase_deg"))
                     generators[idx].phaseDeg.store(t["phase_deg"].get<float>());
                 
-                toAmps[idx] = targetAmp;
+                toAmps[idx] = baseAmp;
             }
         }
     }
 
-    int duration = fadeDurationMs(fade_transition);
+    // Hardcoded 100ms fade
+    const int duration = 100;
 
-    std::thread([fromAmps, toAmps, duration, symbol_id, fade_transition]() {
-        const int steps  = 60;
-        int stepMs = std::max(1, duration / steps);
+    std::thread([fromAmps, toAmps, duration, symbol_id]() {
+        const int steps  = 20;
+        int stepMs = duration / steps;
 
         for (int s = 1; s <= steps; s++) {
             float t = (float)s / steps;
@@ -114,7 +125,7 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
         for (int i = 0; i < NUM_GENERATORS; i++)
             generators[i].amp.store(toAmps[i]);
 
-        std::cout << "Applying: " << symbol_id << " | Fade: " << fade_transition << " (" << duration << "ms)\n";
+        std::cout << "[DSP] Applied: " << symbol_id << " (100ms fade)\n";
     }).detach();
 }
 
@@ -127,61 +138,16 @@ void resetGenerators() {
     }
 }
 
-int audioCallback(const void *inputBuffer, void *outputBuffer,
-                         unsigned long framesPerBuffer,
-                         const PaStreamCallbackTimeInfo* timeInfo,
-                         PaStreamCallbackFlags statusFlags,
-                         void *userData) {
+// Helper for transducers
+void generateSineWaves(float* outBuffer, unsigned long frames, int numOutChannels) {
+    int activeGenerators = std::min(NUM_GENERATORS, numOutChannels);
 
-    measuredLatency.store((timeInfo->outputBufferDacTime - timeInfo->currentTime) * 1000.0);
-
-    float *out = (float*)outputBuffer;
-    (void) inputBuffer;
-    (void) statusFlags;
-    (void) userData;
-
-    // Zero out the buffer
-    for (unsigned int i = 0; i < framesPerBuffer * NUM_CHANNELS; i++) out[i] = 0.0f;
-
-    if (masterMute.load()) return paContinue;
-
-    // --- 1. Process libpd for Music Channels ---
-    // libpd_process_float expects interleaved buffers.
-    // We'll process into a local temporary buffer and then mix into the main out.
-    std::vector<float> pdOut(framesPerBuffer * 2); // Stereo music
-    int ticks = framesPerBuffer / libpd_blocksize();
-    libpd_process_float(ticks, nullptr, pdOut.data());
-
-    float mVolL = musicVolL.load();
-    float mVolR = musicVolR.load();
-    bool mUnmute = !musicMute.load();
-
-    // --- 2. Generate and Mix all signals ---
-    for (unsigned int i = 0; i < framesPerBuffer; i++) {
-        
-        // A. Mix Music into designated channels (1 & 2 by default)
-        if (mUnmute) {
-            float leftMusic = pdOut[i * 2] * mVolL;
-            float rightMusic = pdOut[i * 2 + 1] * mVolR;
-
-            for (int music_ch : systemConfig.routing.music_channels) {
-                int idx = music_ch - 1;
-                if (idx >= 0 && idx < NUM_CHANNELS) {
-                    // Simple logic: first music channel is L, second is R (if available)
-                    if (music_ch == systemConfig.routing.music_channels[0])
-                        out[i * NUM_CHANNELS + idx] += leftMusic;
-                    else
-                        out[i * NUM_CHANNELS + idx] += rightMusic;
-                }
-            }
-        }
-
-        // B. Generate Sine Waves for Transducers
-        for (int genIdx = 0; genIdx < NUM_GENERATORS; genIdx++) {
+    for (unsigned int i = 0; i < frames; i++) {
+        for (int genIdx = 0; genIdx < activeGenerators; genIdx++) {
             auto& gen = generators[genIdx];
             float f = gen.freq.load();
             float a = gen.amp.load();
-            if (a <= 0.00001f) continue; // Optimization
+            if (a <= 0.00001f) continue;
 
             float p = gen.phaseDeg.load() * (PI / 180.0);
             double phaseIncrement = (2.0 * PI * f) / SAMPLE_RATE;
@@ -189,21 +155,115 @@ int audioCallback(const void *inputBuffer, void *outputBuffer,
             if (gen.currentBasePhase >= 2.0 * PI) gen.currentBasePhase -= 2.0 * PI;
 
             float sample = a * std::sin(gen.currentBasePhase + p);
-
-            // Transducers go to their physical channels directly
-            out[i * NUM_CHANNELS + genIdx] += sample;
+            outBuffer[i * numOutChannels + genIdx] += sample;
         }
+    }
+}
+
+// Helper for Music
+void mixMusic(float* outBuffer, unsigned long frames, int numOutChannels) {
+    if (musicMute.load()) return;
+
+    std::vector<float> pdOut(frames * 2);
+    int ticks = frames / libpd_blocksize();
+    libpd_process_float(ticks, nullptr, pdOut.data());
+
+    float mVolL = musicVolL.load();
+    float mVolR = musicVolR.load();
+
+    for (unsigned int i = 0; i < frames; i++) {
+        float leftMusic = pdOut[i * 2] * mVolL;
+        float rightMusic = pdOut[i * 2 + 1] * mVolR;
+
+        for (int music_ch : systemConfig.routing.music_channels) {
+            int idx = music_ch - 1;
+            // SAFETY: Ensure index is within the physical device's buffer bounds
+            if (idx >= 0 && idx < numOutChannels) {
+                if (music_ch == systemConfig.routing.music_channels[0])
+                    outBuffer[i * numOutChannels + idx] += leftMusic;
+                else
+                    outBuffer[i * numOutChannels + idx] += rightMusic;
+            }
+        }
+    }
+}
+
+// --- COMBINED CALLBACK ---
+int audioCallback(const void *inputBuffer, void *outputBuffer,
+                         unsigned long framesPerBuffer,
+                         const PaStreamCallbackTimeInfo* timeInfo,
+                         PaStreamCallbackFlags statusFlags,
+                         void *userData) {
+    (void) inputBuffer; (void) statusFlags; (void) userData;
+    measuredLatency.store((timeInfo->outputBufferDacTime - timeInfo->currentTime) * 1000.0);
+
+    float *out = (float*)outputBuffer;
+    for (unsigned int i = 0; i < framesPerBuffer * NUM_CHANNELS; i++) out[i] = 0.0f;
+
+    if (masterMute.load()) return paContinue;
+
+    mixMusic(out, framesPerBuffer, NUM_CHANNELS);
+    generateSineWaves(out, framesPerBuffer, NUM_CHANNELS);
+
+    return paContinue;
+}
+
+// --- MUSIC ONLY CALLBACK (HDMI) ---
+int musicCallback(const void *inputBuffer, void *outputBuffer,
+                         unsigned long framesPerBuffer,
+                         const PaStreamCallbackTimeInfo* timeInfo,
+                         PaStreamCallbackFlags statusFlags,
+                         void *userData) {
+    (void) inputBuffer; (void) statusFlags; (void) userData; (void) timeInfo;
+
+    float *out = (float*)outputBuffer;
+    // Standard HDMI is usually 2 channels
+    int channels = 2; 
+    for (unsigned int i = 0; i < framesPerBuffer * channels; i++) out[i] = 0.0f;
+
+    if (masterMute.load() || musicMute.load()) return paContinue;
+
+    std::vector<float> pdOut(framesPerBuffer * 2);
+    int ticks = framesPerBuffer / libpd_blocksize();
+    libpd_process_float(ticks, nullptr, pdOut.data());
+
+    float mVolL = musicVolL.load();
+    float mVolR = musicVolR.load();
+
+    for (unsigned int i = 0; i < framesPerBuffer; i++) {
+        out[i * channels + 0] = pdOut[i * 2] * mVolL;
+        out[i * channels + 1] = pdOut[i * 2 + 1] * mVolR;
     }
 
     return paContinue;
 }
 
+// --- TRANSDUCER ONLY CALLBACK (USB) ---
+int transducerCallback(const void *inputBuffer, void *outputBuffer,
+                         unsigned long framesPerBuffer,
+                         const PaStreamCallbackTimeInfo* timeInfo,
+                         PaStreamCallbackFlags statusFlags,
+                         void *userData) {
+    (void) inputBuffer; (void) statusFlags; (void) userData;
+    measuredLatency.store((timeInfo->outputBufferDacTime - timeInfo->currentTime) * 1000.0);
+
+    float *out = (float*)outputBuffer;
+    for (unsigned int i = 0; i < framesPerBuffer * NUM_CHANNELS; i++) out[i] = 0.0f;
+
+    if (masterMute.load()) return paContinue;
+
+    generateSineWaves(out, framesPerBuffer, NUM_CHANNELS);
+
+    return paContinue;
+}
+
 int selectAudioDevice() {
+    // Deprecated for production, but kept as fallback
     int numDevices = Pa_GetDeviceCount();
     std::cout << "\nAvailable audio devices:\n";
     for (int i = 0; i < numDevices; i++) {
         const PaDeviceInfo* info = Pa_GetDeviceInfo(i);
-        if (info && info->maxOutputChannels >= NUM_CHANNELS)
+        if (info && info->maxOutputChannels >= 2)
             std::cout << "  [" << i << "] " << info->name 
                       << " (out: " << info->maxOutputChannels << "ch)\n";
     }

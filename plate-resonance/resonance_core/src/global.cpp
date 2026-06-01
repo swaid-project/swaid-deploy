@@ -20,6 +20,9 @@ std::atomic<bool> musicMute{false};
 std::atomic<float> musicVolL{1.0f};
 std::atomic<float> musicVolR{1.0f};
 
+std::atomic<int> transducerDeviceIdx{-1};
+std::atomic<int> musicDeviceIdx{-1};
+
 const int NUM_CHANNELS    = 8; 
 const int NUM_GENERATORS  = 8; 
 

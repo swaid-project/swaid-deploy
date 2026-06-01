@@ -29,6 +29,8 @@ struct Generator {
 };
 
 struct AudioRouting {
+    std::string transducer_device_name;
+    std::string music_device_name;
     std::vector<int> music_channels;
     std::unordered_map<int, int> logical_to_physical_transducer;
 };
@@ -54,6 +56,10 @@ extern std::atomic<bool> musicMute;
 extern std::atomic<float> musicVolL;
 extern std::atomic<float> musicVolR;
 
+// Device indices resolved at runtime
+extern std::atomic<int> transducerDeviceIdx;
+extern std::atomic<int> musicDeviceIdx;
+
 // --- Constants 
 extern const double PI;
 extern int SAMPLE_RATE;
@@ -62,24 +68,44 @@ extern const int FRAMES_PER_BUFFER;
 // --- Config loading
 bool loadSystemConfig(const std::string& path);
 
-// --- Duration for the amplitude for fade
-int fadeDurationMs(const std::string& t);
+// --- Audio Device Discovery
+int findAudioDeviceByName(const std::string& nameSubstr);
 
 // --- Sending the pattern to the soundcard generators
-void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, const std::string& fade_transition, int vol_l = 100, int vol_r = 100);
+// Updated: Removed fade_transition string to hardcode 100ms
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l = 100, int vol_r = 100);
 
 // --- Helper function to reset all generators
 void resetGenerators();
 
-// --- Audio callback
+/**
+ * @brief Combined callback for when music and transducers are on the same device.
+ */
 int audioCallback(const void *inputBuffer, 
-                         void *outputBuffer,
-                         unsigned long framesPerBuffer,
-                         const PaStreamCallbackTimeInfo* timeInfo,
-                         PaStreamCallbackFlags statusFlags,
-                         void *userData);
+                  void *outputBuffer,
+                  unsigned long framesPerBuffer,
+                  const PaStreamCallbackTimeInfo* timeInfo,
+                  PaStreamCallbackFlags statusFlags,
+                  void *userData);
 
-// --- Audio Device Selection
-int selectAudioDevice();
+/**
+ * @brief Dedicated callback for music output (e.g., HDMI).
+ */
+int musicCallback(const void *inputBuffer, 
+                  void *outputBuffer,
+                  unsigned long framesPerBuffer,
+                  const PaStreamCallbackTimeInfo* timeInfo,
+                  PaStreamCallbackFlags statusFlags,
+                  void *userData);
+
+/**
+ * @brief Dedicated callback for transducer output (USB Soundcard).
+ */
+int transducerCallback(const void *inputBuffer, 
+                       void *outputBuffer,
+                       unsigned long framesPerBuffer,
+                       const PaStreamCallbackTimeInfo* timeInfo,
+                       PaStreamCallbackFlags statusFlags,
+                       void *userData);
 
 #endif

@@ -20,6 +20,9 @@ std::thread hardwareWorker;
 std::unordered_map<std::string, json> catalogue;
 std::unordered_map<int, std::string> musicNoteMap;
 
+// Global tracker for current note to prevent spam
+static int current_playing_note = -1;
+
 /**
  * @brief Simple receiver for libpd messages.
  * Note: These callbacks run in the AUDIO THREAD context.
@@ -29,33 +32,41 @@ void pd_float_hook(const char *source, float value) {
     if (std::string(source) == "to_core") {
         int note = static_cast<int>(value);
         
-        // 1. Update Transducers (Safe atomic update)
-        if (musicNoteMap.count(note)) {
-            std::string chladni_id = musicNoteMap[note];
-            if (catalogue.count(chladni_id)) {
-                auto& pattern = catalogue[chladni_id];
-                if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
-                    for (const auto& t : pattern["hardware_config"]["channels"]) {
-                        int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
-                        if (logical == -1 && t.contains("channel")) logical = t["channel"].get<int>();
+        // SAFETY NET: Only execute if the note actually changed
+        if (note != current_playing_note) {
+            current_playing_note = note; 
+            
+            // 1. Update Transducers (Safe atomic update)
+            if (musicNoteMap.count(note)) {
+                std::string chladni_id = musicNoteMap[note];
+                if (catalogue.count(chladni_id)) {
+                    auto& pattern = catalogue[chladni_id];
+                    if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
+                        for (const auto& t : pattern["hardware_config"]["channels"]) {
+                            int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
+                            if (logical == -1 && t.contains("channel")) logical = t["channel"].get<int>();
 
-                        if (systemConfig.routing.logical_to_physical_transducer.count(logical)) {
-                            int physical = systemConfig.routing.logical_to_physical_transducer[logical];
-                            int idx = physical - 1;
-                            if (idx >= 0 && idx < 8) {
-                                generators[idx].freq.store(t["frequency_hz"].get<float>());
-                                if (t.contains("phase_deg"))
-                                    generators[idx].phaseDeg.store(t["phase_deg"].get<float>());
-                                generators[idx].amp.store(t["amplitude"].get<float>());
+                            if (systemConfig.routing.logical_to_physical_transducer.count(logical)) {
+                                int physical = systemConfig.routing.logical_to_physical_transducer[logical];
+                                int idx = physical - 1;
+                                if (idx >= 0 && idx < 8) {
+                                    generators[idx].freq.store(t["frequency_hz"].get<float>());
+                                    if (t.contains("phase_deg"))
+                                        generators[idx].phaseDeg.store(t["phase_deg"].get<float>());
+                                    
+                                    // Transducers strictly use physics amplitudes, ignore music volumes
+                                    generators[idx].amp.store(t["amplitude"].get<float>());
+                                }
                             }
                         }
                     }
                 }
             }
+            
+            // 2. Queue LED update (Safe lock-free push)
+            // Offload Serial I/O to Thread 3
+            ledQueue.push(note % 20); 
         }
-        
-        // 2. Queue LED update (Safe lock-free push)
-        ledQueue.push(note % 20); 
     }
 }
 
@@ -221,7 +232,7 @@ void jsonListenerThread() {
             ledQueue.push(led_effect);
 
             // 3. Apply Chladni Pattern (Transducers)
-            applyPattern(catalogue, chladni_id, "MEDIUM", vol_l, vol_r);
+            applyPattern(catalogue, chladni_id, vol_l, vol_r);
 
             rep_socket.send(zmq::str_buffer("{\"status\": \"ok\"}"), zmq::send_flags::none);
         } 
