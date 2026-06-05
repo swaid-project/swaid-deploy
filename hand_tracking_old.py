@@ -31,12 +31,14 @@ from mediapipe.tasks.python.vision.hand_landmarker import HandLandmarksConnectio
 
 MODEL_PATH = Path(__file__).parent / "models" / "hand_landmarker.task"
 
-CAMERA_WIDTH = 1280
-CAMERA_HEIGHT = 1920
-CAMERA_FPS = 20
+# --------------- RESOLUTION AND PERFORMANCE SETTINGS ---------------
 
-CANVAS_WIDTH = 1280
-CANVAS_HEIGHT = 920
+# DIFF 1 & 2: Updated from 1280×1920 / 1280×920 to match main branch
+CAMERA_WIDTH = 1980
+CAMERA_HEIGHT = 1020
+
+CANVAS_WIDTH = 1980
+CANVAS_HEIGHT = 1020
 DISPLAY_FPS = 30
 TARGET_FPS = 20
 

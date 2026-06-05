@@ -804,6 +804,7 @@ def camera_open_candidates(source):
     return candidates
 
 
+# DIFF 7: Updated to use np.zeros + conditional fill (matches main branch)
 def letterbox_for_detection(frame):
     frame_height, frame_width = frame.shape[:2]
     scale = min(DETECTION_WIDTH / frame_width, DETECTION_HEIGHT / frame_height)
@@ -817,11 +818,12 @@ def letterbox_for_detection(frame):
         (resized_width, resized_height),
         interpolation=cv2.INTER_AREA,
     )
-    detection_frame = np.full(
+    detection_frame = np.zeros(
         (DETECTION_HEIGHT, DETECTION_WIDTH, 3),
-        DETECTION_LETTERBOX_COLOR,
         dtype=frame.dtype,
     )
+    if DETECTION_LETTERBOX_COLOR != (0, 0, 0):
+        detection_frame[:] = DETECTION_LETTERBOX_COLOR
     detection_frame[
         offset_y:offset_y + resized_height,
         offset_x:offset_x + resized_width,
@@ -833,6 +835,10 @@ def letterbox_for_detection(frame):
         "width": resized_width,
         "height": resized_height,
     }
+
+
+# DIFF 8: Module-level CLAHE + conditional balanced conversion (matches main branch)
+_CLAHE = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
 
 
 def preprocess_for_hand_detection(image):
@@ -850,13 +856,11 @@ def preprocess_for_hand_detection(image):
         alpha = 1.0
         beta = 0
 
-    balanced = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
+    balanced = cv2.convertScaleAbs(image, alpha=alpha, beta=beta) if (alpha != 1.0 or beta != 0) else image
     lab = cv2.cvtColor(balanced, cv2.COLOR_BGR2LAB)
     lightness, channel_a, channel_b = cv2.split(lab)
 
-    # Contraste local: ajuda quando uma mao esta estourada e a outra em sombra.
-    clahe = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
-    lightness = clahe.apply(lightness)
+    lightness = _CLAHE.apply(lightness)
 
     merged = cv2.merge((lightness, channel_a, channel_b))
     return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
@@ -957,13 +961,33 @@ QPushButton:pressed {
 }
 """
 
+# DIFF 4: Added _TOGGLE_STYLE (was missing from HI-Integration)
+_TOGGLE_STYLE = (
+    "QPushButton {"
+    "  background-color: #1a1e28; color: #6677aa;"
+    "  border: 1px solid #2a3a55; border-radius: 5px;"
+    "  padding: 6px 16px; font-size: 13px; text-align: left;"
+    "}"
+    "QPushButton:checked {"
+    "  background-color: #00d9e825; color: #00d9e8;"
+    "  border: 1px solid #00d9e8;"
+    "}"
+    "QPushButton:hover { border: 1px solid #00d9e8; }"
+)
 
+
+# DIFF 3: Full CameraSettingsDialog updated to match main branch
 class CameraSettingsDialog(QDialog):
     """Dark-themed dialog for selecting tracking and center cameras."""
 
-    def __init__(self, tracking_camera, center_mode, center_camera, parent=None):
+    def __init__(self, tracking_camera, center_mode, center_camera,
+                 standby_callback=None,
+                 diag_callback=None,  diag_active=False,
+                 hb_callback=None,    hb_active=True,
+                 hints_callback=None, hints_active=True,
+                 parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Câmeras  —  SWAID")
+        self.setWindowTitle("SWAID  —  Settings")
         self.setStyleSheet(_DIALOG_STYLE)
         self.camera_choices = discover_camera_choices()
 
@@ -989,21 +1013,59 @@ class CameraSettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
-        hint = QLabel(
-            "Pressiona  <b style='color:#00d9e8'>M</b>  para abrir esta janela   |   "
-            "<b style='color:#00d9e8'>I</b>  para diagnósticos   |   "
-            "<b style='color:#00d9e8'>F</b>  para modo ♯"
-        )
-        hint.setStyleSheet("color: #445566; font-size: 11px; padding-top: 6px;")
+        from PySide6.QtWidgets import QPushButton, QHBoxLayout, QWidget as _W
 
+        # -- Toggle row -------------------------------------------------------
+        diag_btn = QPushButton("  [I]  Diagnostics")
+        diag_btn.setCheckable(True)
+        diag_btn.setChecked(diag_active)
+        diag_btn.setStyleSheet(_TOGGLE_STYLE)
+        if diag_callback:
+            diag_btn.clicked.connect(diag_callback)
+
+        hb_btn = QPushButton("  [H]  Heartbeat")
+        hb_btn.setCheckable(True)
+        hb_btn.setChecked(hb_active)
+        hb_btn.setStyleSheet(_TOGGLE_STYLE)
+        if hb_callback:
+            hb_btn.clicked.connect(hb_callback)
+
+        hints_btn = QPushButton("  [B]  Hints Bar")
+        hints_btn.setCheckable(True)
+        hints_btn.setChecked(hints_active)
+        hints_btn.setStyleSheet(_TOGGLE_STYLE)
+        if hints_callback:
+            hints_btn.clicked.connect(hints_callback)
+
+        toggle_row = _W()
+        toggle_row_layout = QHBoxLayout(toggle_row)
+        toggle_row_layout.setContentsMargins(0, 0, 0, 0)
+        toggle_row_layout.setSpacing(8)
+        toggle_row_layout.addWidget(diag_btn)
+        toggle_row_layout.addWidget(hb_btn)
+        toggle_row_layout.addWidget(hints_btn)
+
+        # -- Standby test button ----------------------------------------------
+        standby_btn = QPushButton("▶  Test Standby Mode")
+        standby_btn.setStyleSheet(
+            "QPushButton { color: #00d9e8; border: 1px solid #00d9e840; }"
+            "QPushButton:hover { background-color: #00d9e820; border: 1px solid #00d9e8; }"
+        )
+        if standby_callback:
+            standby_btn.clicked.connect(standby_callback)
+        else:
+            standby_btn.setEnabled(False)
+
+        # -- Layout -----------------------------------------------------------
         layout = QFormLayout(self)
         layout.setContentsMargins(24, 20, 24, 16)
         layout.setVerticalSpacing(12)
         layout.setHorizontalSpacing(16)
+        layout.addRow("Toggles",          toggle_row)
         layout.addRow("Tracking das mãos", self.tracking_camera_combo)
-        layout.addRow("Centro", self.center_mode_combo)
-        layout.addRow("Câmera do centro", self.center_camera_combo)
-        layout.addRow("", hint)
+        layout.addRow("Centro",            self.center_mode_combo)
+        layout.addRow("Câmera do centro",  self.center_camera_combo)
+        layout.addRow("",                  standby_btn)
         layout.addRow(buttons)
 
     def values(self):
@@ -1161,12 +1223,14 @@ def main():
 
     window.testing_toggle.connect(toggle_testing)
 
+    # DIFF 6: Added "settings_dialog": None to state dict
     state = {
         "tracking_camera": initial_camera,
-    "center_mode": "live",
-        "center_camera": initial_camera,
-        "tracker": None,
-        "center_feed": None,
+        "center_mode":     "live",
+        "center_camera":   initial_camera,
+        "tracker":         None,
+        "center_feed":     None,
+        "settings_dialog": None,
     }
 
     def stop_thread(thread):
@@ -1219,21 +1283,38 @@ def main():
         state["center_mode"] = "symbol"
         window.set_center_live_image(None)
 
+    # DIFF 5: open_camera_settings updated — persistent dialog, toggle callbacks,
+    #         standby callback, non-blocking show() instead of exec()
     def open_camera_settings():
-        dialog = CameraSettingsDialog(
+        dlg = state["settings_dialog"]
+        if dlg is not None and dlg.isVisible():
+            dlg.close()
+            return
+
+        def on_accepted():
+            values = dlg.values()
+            if values["tracking_camera"] != state["tracking_camera"]:
+                start_tracking(values["tracking_camera"])
+            start_center_feed(values["center_camera"])
+
+        dlg = CameraSettingsDialog(
             state["tracking_camera"],
             state["center_mode"],
             state["center_camera"],
-            window,
+            standby_callback=window.trigger_standby_test,
+            diag_callback=lambda: window.testing_toggle.emit(),
+            diag_active=overlay.isVisible(),
+            hb_callback=window._toggle_heartbeat,
+            hb_active=window._heartbeat_enabled,
+            hints_callback=lambda: setattr(window, "_hints_visible",
+                                           not window._hints_visible) or window.update(),
+            hints_active=window._hints_visible,
+            parent=window,
         )
-        if dialog.exec() != QDialog.Accepted:
-            return
-
-        values = dialog.values()
-        if values["tracking_camera"] != state["tracking_camera"]:
-            start_tracking(values["tracking_camera"])
-
-        start_center_feed(values["center_camera"])
+        dlg.accepted.connect(on_accepted)
+        dlg.finished.connect(lambda _: state.update({"settings_dialog": None}))
+        state["settings_dialog"] = dlg
+        dlg.show()
 
     window.settings_requested.connect(open_camera_settings)
     start_tracking(state["tracking_camera"])

@@ -25,8 +25,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from PySide6.QtCore  import QPointF, QRectF, Qt, QThread, QTimer, Signal
+# DIFF 9: Added QPolygonF (was missing from HI-Integration import)
 from PySide6.QtGui   import (QColor, QFont, QImage, QPainter, QPainterPath,
-                              QPen, QPixmap, QRadialGradient)
+                              QPen, QPixmap, QPolygonF, QRadialGradient)
 from PySide6.QtWidgets import QApplication, QWidget
 
 # Add resonance_sdk to the Python path so ResonanceClient can be imported
@@ -75,6 +76,43 @@ NOTE_MAP: dict[str, int] = {
 _IDLE_TIMEOUT_S   = 5 * 60
 _CYCLE_INTERVAL_S = 60
 _TOTAL_NOTES      = 12
+
+# DIFF 10: Added _STANDBY_TIMEOUT_S (was missing from HI-Integration)
+# -- Standby attract mode ----------------------------------------------------
+_STANDBY_TIMEOUT_S = 5 * 60   # seconds without hand detection → show standby
+
+# DIFF 11: Added _GHOST_HAND_PTS (was missing from HI-Integration)
+# Normalized open-palm hand shape (21 MediaPipe-order points).
+# Thumb points LEFT (−x) = right hand frontal view.
+# Flip x for left hand.
+_GHOST_HAND_PTS = (
+    ( 0.00,  0.00),  # 0  wrist
+    (-0.30, -0.20),  # 1  thumb cmc
+    (-0.50, -0.38),  # 2  thumb mcp
+    (-0.63, -0.52),  # 3  thumb ip
+    (-0.70, -0.63),  # 4  thumb tip
+    (-0.12, -0.52),  # 5  index mcp
+    (-0.14, -0.70),  # 6  index pip
+    (-0.15, -0.83),  # 7  index dip
+    (-0.15, -0.93),  # 8  index tip
+    ( 0.00, -0.56),  # 9  middle mcp
+    ( 0.00, -0.76),  # 10 middle pip
+    ( 0.00, -0.90),  # 11 middle dip
+    ( 0.00, -1.00),  # 12 middle tip
+    ( 0.13, -0.52),  # 13 ring mcp
+    ( 0.15, -0.70),  # 14 ring pip
+    ( 0.15, -0.83),  # 15 ring dip
+    ( 0.15, -0.93),  # 16 ring tip
+    ( 0.26, -0.43),  # 17 pinky mcp
+    ( 0.28, -0.58),  # 18 pinky pip
+    ( 0.28, -0.68),  # 19 pinky dip
+    ( 0.28, -0.76),  # 20 pinky tip
+)
+
+# DIFF 12: Added _WAVE_STEP_BG / _WAVE_STEP_CIRCLE (were missing from HI-Integration)
+# -- Render quality (bigger step = fewer points = better FPS) ----------------
+_WAVE_STEP_BG     = 3
+_WAVE_STEP_CIRCLE = 3
 
 
 # ===========================================================================
@@ -295,7 +333,8 @@ class MainWindow(QWidget):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
-        self.timer.start(16)
+        # DIFF 13: Changed from 16 ms to 33 ms to match main branch
+        self.timer.start(33)
 
         self._logo = _load_logo()
 
@@ -325,7 +364,9 @@ class MainWindow(QWidget):
                 print(f"[Symbols] Image load failed for {name}: {exc}")
 
     def _init_animation_state(self) -> None:
+        # DIFF 14: Added _anim_last_time (for dt-based animation)
         self.t                   = 0.0
+        self._anim_last_time     = 0.0
         self.frequency           = 2.7
         self.wave_amplitude      = 0.0
         self.selected_section    = 0
@@ -352,6 +393,11 @@ class MainWindow(QWidget):
         # Spec 1: center circle enlarged (0.265 → 0.33)
         self.selector_radius_scale     = 0.39
         self.center_plate_radius_scale = 0.33
+        # DIFF 14: Added _chladni_cache, _standby_active, _last_hand_at, _hints_visible
+        self._chladni_cache: "dict[tuple, QPixmap]" = {}
+        self._standby_active           = False
+        self._last_hand_at             = time.monotonic()
+        self._hints_visible            = True
 
         self.sector_labels = ["E", "D", "C", "B", "A", "F"]
         self.image_labels  = ["D#", "F#", "G#", "A#", "G", "C#"]
@@ -542,10 +588,30 @@ class MainWindow(QWidget):
     # Section 5: Core widget interface (called by main.py)
     # -----------------------------------------------------------------------
 
+    # DIFF 16: Added trigger_standby_test / _enter_standby / _exit_standby
+    def trigger_standby_test(self) -> None:
+        self._enter_standby()
+        self.update()
+
+    def _enter_standby(self) -> None:
+        if self._standby_active:
+            return
+        self._standby_active = True
+        print("[Standby] Entering standby mode.")
+
+    def _exit_standby(self) -> None:
+        if not self._standby_active:
+            return
+        self._standby_active = False
+        print("[Standby] Exiting standby mode.")
+
     def set_tracked_hands(self, left_hand=None, right_hand=None,
                           blue_hand_closed: bool = False,
                           cursor_point=None) -> None:
         if left_hand is not None or right_hand is not None:
+            # DIFF 15: Added standby exit logic
+            self._last_hand_at = time.monotonic()
+            self._exit_standby()
             self._record_interaction()
 
         self.external_left_hand  = left_hand
@@ -570,8 +636,14 @@ class MainWindow(QWidget):
     # Section 5: Animation loop
     # -----------------------------------------------------------------------
 
+    # DIFF 17: Updated to dt-based time advancement + standby check
     def update_animation(self) -> None:
-        self.t += 0.05
+        now = time.monotonic()
+        if self._anim_last_time == 0.0:
+            self._anim_last_time = now
+        dt = min(now - self._anim_last_time, 0.05)  # cap: skip big jumps after pause
+        self._anim_last_time = now
+        self.t += dt * 3.0  # 3.0 keeps same apparent speed as the old 0.05 at ~60 fps
         channels = self._channels_for_note(self._display_note_id())
         if channels:
             avg_freq = sum(ch["frequency_hz"] for ch in channels) / len(channels)
@@ -586,6 +658,11 @@ class MainWindow(QWidget):
         if not self._idle_active:
             if time.monotonic() - self._last_interaction >= _IDLE_TIMEOUT_S:
                 self._enter_idle_mode()
+
+        # DIFF 17: Added standby timeout check
+        if (not self._standby_active
+                and time.monotonic() - self._last_hand_at >= _STANDBY_TIMEOUT_S):
+            self._enter_standby()
 
         self.update_dwell_selection()
         self.update()
@@ -676,6 +753,10 @@ class MainWindow(QWidget):
         key = event.key()
         if key == Qt.Key_M:
             self.settings_requested.emit()
+        # DIFF 22: Added Key_B handler for hints visibility toggle
+        elif key == Qt.Key_B:
+            self._hints_visible = not self._hints_visible
+            self.update()
         elif key == Qt.Key_H:
             self._toggle_heartbeat()
         elif key == Qt.Key_I:
@@ -728,14 +809,16 @@ class MainWindow(QWidget):
         # Layer 2: diagonal background wave (deepest visual layer)
         channels = self._channels_for_note(self._display_note_id())
         painter.save()
-        painter.rotate(31)
-        self._draw_wave(painter, 0, 0, length=2000, channels=channels) #length = 1200 -> original to the main circle MUDAR ATE ONDAS VAI
+        # DIFF 18: Changed rotate(31) → rotate(30), length=2000 → length=1200
+        painter.rotate(30) #ANGULO DAS ONDAS DE FUNDO
+        self._draw_wave(painter, 0, 0, length=1200, channels=channels) #TAMANHO ONDA
         painter.restore()
 
         # Layer 3: interactive UI
         selector_radius = base_radius * self.selector_radius_scale
         center_radius   = base_radius * self.center_plate_radius_scale  # enlarged
-        preview_radius  = max(150, base_radius * 0.13)   # CIRCLO PRREVIEW
+        # DIFF 18: Changed 0.13 → 0.15 for preview_radius
+        preview_radius  = max(150, base_radius * 0.15)   # CIRCULO PREVIEW
 
         img_btn_x = w - 104
         img_btn_y = 16
@@ -751,6 +834,10 @@ class MainWindow(QWidget):
         self._draw_image_button(painter, img_btn_x, img_btn_y)
 
         # Layer 4: status overlays
+        # DIFF 18: Added standby overlay block
+        if self._standby_active:
+            self._draw_standby_overlay(painter, cx, cy, center_radius)
+
         if self._idle_active:
             pulse = 0.55 + 0.45 * abs(math.sin(self.t * 0.6))
             c = QColor(0, 217, 232, int(200 * pulse))
@@ -766,7 +853,9 @@ class MainWindow(QWidget):
             lw = int(lh * self._logo.width() / self._logo.height())
             painter.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
 
-        self._draw_hints(painter, w, h)
+        # DIFF 18: Added hints visibility guard
+        if self._hints_visible:
+            self._draw_hints(painter, w, h)
         self._draw_heartbeat_indicator(painter, w)
 
     # -----------------------------------------------------------------------
@@ -870,12 +959,13 @@ class MainWindow(QWidget):
     # Section 5: Wave renderer
     # -----------------------------------------------------------------------
 
+    # DIFF 19: Uses QPolygonF + drawPolyline (main branch style), _WAVE_STEP_BG constant
     def _draw_wave(self, painter: QPainter, x0: float, y0: float,
                    length: int = 485, channels: list | None = None) -> None:
         wave_count = 4
         spacing    = 44
         speed      = self.t * 4.0
-        base_amp   = 20 + 15 * self.wave_amplitude
+        base_amp   = 20 + 15 * self.wave_amplitude # ONDA AMPLITUDE
         colors     = [QColor("#ff3a9e"), QColor("#cde70b"),
                       QColor("#00eaff"), QColor("#ff8500")]
 
@@ -899,20 +989,18 @@ class MainWindow(QWidget):
             ph       = phases[wi]
             wk       = wknums[wi]
             col      = colors[wi]
-            pts      = [QPointF(x0 + x, baseline + math.sin(x * wk + speed + ph) * amp)
-                        for x in range(0, length, 3)]
+            poly = QPolygonF([QPointF(x0 + x, baseline + math.sin(x * wk + speed + ph) * amp)
+                              for x in range(0, length, _WAVE_STEP_BG)])
 
             glow = QColor(col); glow.setAlpha(42)
-            painter.setPen(QPen(glow, 10, Qt.SolidLine, Qt.RoundCap))
-            for i in range(len(pts) - 1):
-                painter.drawLine(pts[i], pts[i + 1])
+            painter.setPen(QPen(glow, 10, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawPolyline(poly)
 
             lc = QColor(col); lc.setAlpha(210)
-            painter.setPen(QPen(lc, 3, Qt.SolidLine, Qt.RoundCap))
-            for i in range(len(pts) - 1):
-                painter.drawLine(pts[i], pts[i + 1])
+            painter.setPen(QPen(lc, 3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawPolyline(poly)
 
-            dot_offsets = (0.0, length / 3.0, 2.0 * length / 3.0)
+            dot_offsets = (0.0, length / 3.0, 2.0 * length / 3.0) # PULSE DOTS FREQUENCY
             painter.setBrush(col)
             painter.setPen(QPen(QColor("#ffffff"), 2))
             for offset in dot_offsets:
@@ -929,6 +1017,7 @@ class MainWindow(QWidget):
     # Section 5: Wave overlay clipped to a circle
     # -----------------------------------------------------------------------
 
+    # DIFF 20: Uses _WAVE_STEP_CIRCLE constant (was hardcoded step=2)
     def _draw_wave_in_circle(self, painter: QPainter,
                              cx: float, cy: float,
                              inner_r: float, wave_lanes: int = 4) -> None:
@@ -968,7 +1057,7 @@ class MainWindow(QWidget):
 
             pts = [QPointF(x_start + x,
                            baseline + math.sin(x * wk + speed + ph) * amp)
-                   for x in range(0, wave_len, 2)]
+                   for x in range(0, wave_len, _WAVE_STEP_CIRCLE)]
 
             glow = QColor(col); glow.setAlpha(28)
             painter.setPen(QPen(glow, 7, Qt.SolidLine, Qt.RoundCap))
@@ -1101,6 +1190,25 @@ class MainWindow(QWidget):
     def _draw_chladni_plate(self, painter: QPainter,
                              cx: float, cy: float,
                              radius: float, detail: int) -> None:
+        cache_key = (self.selected_section, int(radius))
+        if cache_key not in self._chladni_cache:
+            size = int(radius * 2) + 8
+            pix = QPixmap(size, size)
+            pix.fill(Qt.transparent)
+            lcx = size / 2.0
+            lcy = size / 2.0
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.Antialiasing)
+            self._paint_chladni(p, lcx, lcy, radius, detail)
+            p.end()
+            self._chladni_cache[cache_key] = pix
+
+        pix = self._chladni_cache[cache_key]
+        painter.drawPixmap(int(cx - pix.width() / 2), int(cy - pix.height() / 2), pix)
+
+    def _paint_chladni(self, painter: QPainter,
+                        cx: float, cy: float,
+                        radius: float, detail: int) -> None:
         painter.setBrush(QColor("#bf8a47"))
         painter.setPen(QPen(QColor("#f3cf8d"), max(2, int(radius * 0.03))))
         painter.drawEllipse(QPointF(cx, cy), radius, radius)
@@ -1247,6 +1355,88 @@ class MainWindow(QWidget):
                 QRectF(bx - 22 + i * 11, self.image_btn_rect.top() + 16, 10, 24), 5, 5)
         painter.drawLine(QPointF(bx - 8, by + 20), QPointF(bx - 18, by + 10))
         painter.drawLine(QPointF(bx + 8, by + 20), QPointF(bx + 18, by + 10))
+
+    # -----------------------------------------------------------------------
+    # Section 5: Standby attract overlay
+    # -----------------------------------------------------------------------
+
+    # DIFF 21: Added _ghost_landmarks and _draw_standby_overlay (were missing)
+    def _ghost_landmarks(self, cx: float, cy: float,
+                         scale: float, flip: bool) -> list:
+        f = -1.0 if flip else 1.0
+        return [QPointF(cx + dx * scale * f, cy + dy * scale)
+                for dx, dy in _GHOST_HAND_PTS]
+
+    def _draw_standby_overlay(self, painter: QPainter,
+                               cx: float, cy: float,
+                               center_radius: float) -> None:
+        pulse  = 0.60 + 0.40 * abs(math.sin(self.t * 1.2))
+        w      = self.width()
+        scale  = 300
+        alpha  = int(210 * pulse)
+
+        left_cx  = w * 0.14
+        right_cx = w * 0.86
+
+        # Ghost hands flanking the selector ring
+        painter.setOpacity(0.38 * pulse)
+        left_pts  = self._ghost_landmarks(left_cx,  cy, scale, flip=True)
+        right_pts = self._ghost_landmarks(right_cx, cy, scale, flip=False)
+        self._draw_real_hand(painter, left_pts,  QColor("#00eaff"), False)
+        self._draw_real_hand(painter, right_pts, QColor("#ff3030"), False)
+        painter.setOpacity(1.0)
+
+        # Labels below left hand — CLOSE / OPEN
+        lbl_w  = 180
+        lbl_x  = left_cx - lbl_w / 2
+        lbl_y  = cy + 24
+        lbl_fn = QFont("Arial", 13, QFont.Bold)
+        painter.setFont(lbl_fn)
+
+        painter.setPen(QColor(0, 234, 255, alpha))
+        painter.drawText(QRectF(lbl_x, lbl_y,      lbl_w, 26), Qt.AlignCenter, "✊  CLOSE")
+        painter.setPen(QColor(180, 240, 255, alpha))
+        painter.drawText(QRectF(lbl_x, lbl_y + 28, lbl_w, 26), Qt.AlignCenter, "✋  OPEN")
+
+        sub_fn = QFont("Arial", 10)
+        sub_fn.setItalic(True)
+        painter.setFont(sub_fn)
+        painter.setPen(QColor(100, 180, 200, int(alpha * 0.7)))
+        painter.drawText(QRectF(lbl_x, lbl_y + 56, lbl_w, 20),
+                         Qt.AlignCenter, "switch note set")
+
+        # Labels below right hand — MOVE INTO A NOTE + color dots
+        rbl_w = 220
+        rbl_x = right_cx - rbl_w / 2
+        rbl_y = cy + 24
+        painter.setFont(QFont("Arial", 13, QFont.Bold))
+        painter.setPen(QColor(255, 80, 80, alpha))
+        painter.drawText(QRectF(rbl_x, rbl_y, rbl_w, 26),
+                         Qt.AlignCenter, "MOVE INTO A NOTE")
+
+        # Colour dots row (matching section_colors)
+        dot_r   = 7
+        n_dots  = len(self.section_colors)
+        spacing = 20
+        row_w   = (n_dots - 1) * spacing
+        dot_y   = rbl_y + 36
+        painter.setPen(Qt.NoPen)
+        for i, col in enumerate(self.section_colors):
+            dot_x = right_cx - row_w / 2 + i * spacing
+            c = QColor(col)
+            c.setAlpha(alpha)
+            painter.setBrush(c)
+            painter.drawEllipse(QPointF(dot_x, dot_y), dot_r, dot_r)
+
+        # Invitation text below center circle
+        text_y = cy + center_radius + 75
+        painter.setPen(QColor(0, 217, 232, alpha))
+        painter.setFont(QFont("Arial", 15, QFont.Bold))
+        painter.drawText(
+            QRectF(cx - 340, text_y, 680, 100),
+            Qt.AlignCenter | Qt.AlignVCenter,
+            "COME TRY!  SELECT A MUSIC NOTE",
+        )
 
 
 # ===========================================================================
