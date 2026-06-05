@@ -17,18 +17,13 @@ std::atomic<double> measuredLatency{0.0};
 std::atomic<bool> headsetMode{false}; 
 std::atomic<bool> masterMute{false};
 std::atomic<bool> musicMute{false};
-std::atomic<float> musicVolL{1.0f};
-std::atomic<float> musicVolR{1.0f};
 
 std::atomic<int> transducerDeviceIdx{-1};
-std::atomic<int> musicDeviceIdx{-1};
 
 std::atomic<int> diag_pico_serial{0};
 std::atomic<int> diag_usb_audio{0};
 std::atomic<int> diag_hdmi_audio{0};
 
-// -2 = no pending note; written by ZMQ thread, consumed by audio callback
-std::atomic<int> pendingLibpdNote{-2};
 
 const int NUM_CHANNELS    = 8; 
 const int NUM_GENERATORS  = 8; 

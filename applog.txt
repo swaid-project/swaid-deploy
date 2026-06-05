@@ -4,220 +4,15 @@ swaid@swaid:~/Documents/swaid-deploy$ make run
 ========================================
 [Launcher] Starting Plate Resonance Server...
 [Config] Loaded correctly. Sample Rate: 48000
-[Main] Services started. Entering Audio Watchdog loop.
-[Watchdog] Audio failure detected or initial boot. Rebuilding context...
 [Hardware Worker] Thread started.
 [LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[Main] Services started. Entering Audio Watchdog loop.
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+[LED SAL] Successfully opened /dev/ttyACM0
 Found JSON Array with 12 elements.
-pd 0.56.3
-bonk version 1.5
-fiddle version 1.1 TEST4
-pd~ version 0.54
-pique 0.1 for PD version 23
-[libpd] Initialized. Block size: 64
-file1.pd 0 0 153 0 (loadbang->loadbang) connection failed
-[LED SAL] Successfully opened /dev/ttyACM0
-[LED SAL] Connected to Pico (fd=4)
-cannot connect to non-existing object
-file1.pd 103 0 157 0 (*~->???) connection failed
-cannot connect to non-existing object
-file1.pd 104 0 157 1 (+->???) connection failed
-error: audio signal outlet connected to nonsignal inlet (ignored)
-error: audio signal outlet connected to nonsignal inlet (ignored)
-ZeroMQ Server ready - listening on ipc:///tmp/swaid.sock (REQ/REP)
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
-GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
-[Watchdog] Audio restored successfully.
-./swaid_launcher.sh: line 36: 66306 Segmentation fault      "$CORE_EXE"  (wd: ~/Documents/swaid-deploy/plate-resonance)
-[Launcher] Starting Human Interface Client...
-[Python UI] INFO: ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
-[ WARN:0@1.990] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
-[ WARN:0@1.990] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
-[ WARN:0@1.991] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
-[video4linux2,v4l2 @ 0x7f2b64002a80] ioctl(VIDIOC_G_INPUT): Inappropriate ioctl for device
-[ERROR:0@1.992] global obsensor_uvc_stream_channel.cpp:163 getStreamChannelGroup Camera index out of range
-[Main] Camera 0 error: Camera 0 could not be opened
-[Main] Auto-switching to fallback camera 1
-[ WARN:1@2.001] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
-[ WARN:1@2.001] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
-[ WARN:1@2.001] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
-[ERROR:1@2.002] global obsensor_uvc_stream_channel.cpp:163 getStreamChannelGroup Camera index out of range
-[Main] Camera 1 error: Camera 1 could not be opened
-[Launcher] UI Closed.
-[Launcher] System Shutdown Complete.
-swaid@swaid:~/Documents/swaid-deploy$ make run
-========================================
-    Launching SWAID System (Production) 
-========================================
-[Launcher] Starting Plate Resonance Server...
-[Config] Loaded correctly. Sample Rate: 48000
-[Hardware Worker] Thread started.
-[Main] Services started. Entering Audio Watchdog loop.
-[LED SAL] Attempting to open port: /dev/ttyACM0 ...
-[Watchdog] Audio failure detected or initial boot. Rebuilding context...
-[LED SAL] Successfully opened /dev/ttyACM0
 [LED SAL] Connected to Pico (fd=3)
-Found JSON Array with 12 elements.
-pd 0.56.3
-bonk version 1.5
-fiddle version 1.1 TEST4
-pd~ version 0.54
-pique 0.1 for PD version 23
-[libpd] Initialized. Block size: 64
-file1.pd 0 0 153 0 (loadbang->loadbang) connection failed
-cannot connect to non-existing object
-file1.pd 103 0 157 0 (*~->???) connection failed
-cannot connect to non-existing object
-file1.pd 104 0 157 1 (+->???) connection failed
-error: audio signal outlet connected to nonsignal inlet (ignored)
-error: audio signal outlet connected to nonsignal inlet (ignored)
-ZeroMQ Server ready - listening on ipc:///tmp/swaid.sock (REQ/REP)
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
-GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
-[Watchdog] Audio restored successfully.
-./swaid_launcher.sh: line 36: 66486 Segmentation fault      "$CORE_EXE"  (wd: ~/Documents/swaid-deploy/plate-resonance)
-[Launcher] Starting Human Interface Client...
-[Python UI] INFO: ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
-[ WARN:0@1.791] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
-[ WARN:0@1.791] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
-[ WARN:0@1.791] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
-[video4linux2,v4l2 @ 0x7fe854002a80] ioctl(VIDIOC_G_INPUT): Inappropriate ioctl for device
-[ERROR:0@1.793] global obsensor_uvc_stream_channel.cpp:163 getStreamChannelGroup Camera index out of range
-[Main] Camera 0 error: Camera 0 could not be opened
-[Main] Auto-switching to fallback camera 1
-[ WARN:1@1.800] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
-[ WARN:1@1.800] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
-[ WARN:1@1.800] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
-[ERROR:1@1.801] global obsensor_uvc_stream_channel.cpp:163 getStreamChannelGroup Camera index out of range
-[Main] Camera 1 error: Camera 1 could not be opened
-[Launcher] UI Closed.
-[Launcher] System Shutdown Complete.
-swaid@swaid:~/Documents/swaid-deploy$ make run
-========================================
-    Launching SWAID System (Production) 
-========================================
-[Launcher] Starting Plate Resonance Server...
-[Config] Loaded correctly. Sample Rate: 48000
-[Hardware Worker] Thread started.
-[Main] Services started. Entering Audio Watchdog loop.
-[Watchdog] Audio failure detected or initial boot. Rebuilding context...
-[LED SAL] Attempting to open port: /dev/ttyACM0 ...
-[LED SAL] Successfully opened /dev/ttyACM0
-[LED SAL] Connected to Pico (fd=3Found JSON Array with )
-12 elements.
-pd 0.56.3
-bonk version 1.5
-fiddle version 1.1 TEST4
-pd~ version 0.54
-pique 0.1 for PD version 23
-[libpd] Initialized. Block size: 64
-file1.pd 0 0 153 0 (loadbang->loadbang) connection failed
-cannot connect to non-existing object
-file1.pd 103 0 157 0 (*~->???) connection failed
-cannot connect to non-existing object
-file1.pd 104 0 157 1 (+->???) connection failed
-error: audio signal outlet connected to nonsignal inlet (ignored)
-error: audio signal outlet connected to nonsignal inlet (ignored)
+[PD] UDP sender ready → 127.0.0.1:3000
+[PD] UDP sender ready → 127.0.0.1:3001
 ZeroMQ Server ready - listening on ipc:///tmp/swaid.sock (REQ/REP)
 ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
@@ -273,20 +68,11 @@ JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unloc
 JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
 [Watchdog] Discovery failed. Retrying in 5 seconds...
 [Launcher] Starting Human Interface Client...
-!!! FAILSAFE TRIGGERED: No heartbeat for 3s. Muting. !!!
 [Python UI] INFO: ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
-[ WARN:0@1.907] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
-[ WARN:0@1.907] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
-[ WARN:0@1.908] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
-[video4linux2,v4l2 @ 0x7f3868002a80] ioctl(VIDIOC_G_INPUT): Inappropriate ioctl for device
-[ERROR:0@1.909] global obsensor_uvc_stream_channel.cpp:163 getStreamChannelGroup Camera index out of range
-[Main] Camera 0 error: Camera 0 could not be opened
-[Main] Auto-switching to fallback camera 1
-[ WARN:1@1.917] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
-[ WARN:1@1.917] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
-[ WARN:1@1.917] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
-[ERROR:1@1.917] global obsensor_uvc_stream_channel.cpp:163 getStreamChannelGroup Camera index out of range
-[Main] Camera 1 error: Camera 1 could not be opened
+[Main] Camera /dev/video0 error: Camera /dev/video0 could not be opened
+[Main] Auto-switching to fallback camera /dev/video1
+[video4linux2,v4l2 @ 0x7fb014009f80] ioctl(VIDIOC_G_INPUT): Inappropriate ioctl for device
+[Main] Camera /dev/video1 error: Camera /dev/video1 could not be opened
 [Watchdog] Audio failure detected or initial boot. Rebuilding context...
 ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
@@ -395,118 +181,280 @@ jack server is not running or cannot be started
 JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
 JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
 [Watchdog] Discovery failed. Retrying in 5 seconds...
-[Watchdog] Audio failure detected or initial boot. Rebuilding context...
-ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
-GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-[Watchdog] Discovery failed. Retrying in 5 seconds...
-[Watchdog] Audio failure detected or initial boot. Rebuilding context...
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
-GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
-ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
-ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
-ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
-ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
-ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
-Cannot connect to server socket err = No such file or directory
-Cannot connect to server request channel
-jack server is not running or cannot be started
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
-[Watchdog] Audio restored successfully.
-[Python UI] DEBUG: TX -> {"trace_id": "req-2cd2a1a9", "message_type": "trigger", "chladni_id": "CHLADNI_1160", "music_note": 11, "led_effect_id": 11, "vol_l": 100, "vol_r": 100}
+[Python UI] DEBUG: TX -> {"trace_id": "req-cd6304df", "message_type": "trigger", "chladni_id": "CHLADNI_655", "music_note": 5, "led_effect_id": 5, "vol_l": 100, "vol_r": 100}
 
-[ZMQ Server RX] <- {"trace_id": "req-2cd2a1a9", "message_type": "trigger", "chladni_id": "CHLADNI_1160", "music_note": 11, "led_effect_id": 11, "vol_l": 100, "vol_r": 100}
-Trigger: CHLADNI_1160 | Note: 11 | LED: 11 | Vol: [100, 100]
-[ZMQ Server TX] -> {"active_state":{"current_chladni_id":"CHLADNI_1160","current_note":11},"diagnostics":{"hdmi_audio":1,"pico_serial":1,"usb_audio":1},"status":"ok"}
-[Python UI] DEBUG: RX <- {"active_state": {"current_chladni_id": "CHLADNI_1160", "current_note": 11}, "diagnostics": {"hdmi_audio": 1, "pico_serial": 1, "usb_audio": 1}, "status": "ok"}
-[LED SAL] Sent FX:11
+[ZMQ Server RX] <- {"trace_id": "req-cd6304df", "message_type": "trigger", "chladni_id": "CHLADNI_655", "music_note": 5, "led_effect_id": 5, "vol_l": 100, "vol_r": 100}
+Trigger: CHLADNI_655 | Note: 5 | LED: 5 | Vol: [100, 100]
+[PD] Note sent: 5 (total=1)
+[ZMQ Server TX] -> {"active_state":{"current_chladni_id":"CHLADNI_655","current_note":5},"diagnostics":{"hdmi_audio":0,"pd_udp":1,"pico_serial":1,"usb_audio":0},"status":"ok"}
+[Python UI] DEBUG: RX <- {"active_state": {"current_chladni_id": "CHLADNI_655", "current_note": 5}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+[LED SAL] Sent FX:5
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Watchdog] Discovery failed. Retrying in 5 seconds...
+[Python UI] DEBUG: TX -> {"trace_id": "req-3fe9544e", "message_type": "trigger", "chladni_id": "CHLADNI_883", "music_note": 9, "led_effect_id": 9, "vol_l": 100, "vol_r": 100}
+
+[ZMQ Server RX] <- {"trace_id": "req-3fe9544e", "message_type": "trigger", "chladni_id": "CHLADNI_883", "music_note": 9, "led_effect_id": 9, "vol_l": 100, "vol_r": 100}
+Trigger: CHLADNI_883 | Note: 9 | LED: 9 | Vol: [100, 100]
+[PD] Note sent: 9 (total=2)
+[ZMQ Server TX] -> {"active_state":{"current_chladni_id":"CHLADNI_883","current_note":9},"diagnostics":{"hdmi_audio":0,"pd_udp":1,"pico_serial":1,"usb_audio":0},"status":"ok"}
+[LED SAL] Sent FX:9
+[Python UI] DEBUG: RX <- {"active_state": {"current_chladni_id": "CHLADNI_883", "current_note": 9}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Watchdog] Discovery failed. Retrying in 5 seconds...
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Watchdog] Discovery failed. Retrying in 5 seconds...
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Watchdog] Discovery failed. Retrying in 5 seconds...
+[Python UI] DEBUG: TX -> {"trace_id": "req-8cde3496", "message_type": "trigger", "chladni_id": "CHLADNI_525", "music_note": 4, "led_effect_id": 4, "vol_l": 100, "vol_r": 100}
+
+[ZMQ Server RX] <- {"trace_id": "req-8cde3496", "message_type": "trigger", "chladni_id": "CHLADNI_525", "music_note": 4, "led_effect_id": 4, "vol_l": 100, "vol_r": 100}
+Trigger: CHLADNI_525 | Note: 4 | LED: 4 | Vol: [100, 100]
+[PD] Note sent: 4 (total=3)
+[ZMQ Server TX] -> {"active_state":{"current_chladni_id":"CHLADNI_525","current_note":4},"diagnostics":{"hdmi_audio":0,"pd_udp":1,"pico_serial":1,"usb_audio":0},"status":"ok"}
+[Python UI] DEBUG: RX <- {"active_state": {"current_chladni_id": "CHLADNI_525", "current_note": 4}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+[LED SAL] Sent FX:4
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+ALSA lib pcm_dmix.c:1000:(snd_pcm_dmix_open) unable to open slave
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel

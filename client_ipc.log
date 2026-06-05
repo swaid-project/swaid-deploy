@@ -23,3 +23,20 @@
 2026-06-05 19:39:04,843 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_655", "current_note": 5}, "diagnostics": {"hdmi_audio": 0, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
 2026-06-05 19:39:15,022 - DEBUG - TX -> {"trace_id": "req-dcb0f11b", "message_type": "trigger", "chladni_id": "CHLADNI_1160", "music_note": 11, "led_effect_id": 11, "vol_l": 100, "vol_r": 100}
 2026-06-05 19:39:15,036 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_1160", "current_note": 11}, "diagnostics": {"hdmi_audio": 0, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+2026-06-05 20:28:07,944 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-05 20:32:01,168 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-05 20:34:02,052 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-05 20:37:06,180 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-05 20:37:15,821 - DEBUG - TX -> {"trace_id": "req-cd6304df", "message_type": "trigger", "chladni_id": "CHLADNI_655", "music_note": 5, "led_effect_id": 5, "vol_l": 100, "vol_r": 100}
+2026-06-05 20:37:15,822 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_655", "current_note": 5}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+2026-06-05 20:37:20,405 - DEBUG - TX -> {"trace_id": "req-3fe9544e", "message_type": "trigger", "chladni_id": "CHLADNI_883", "music_note": 9, "led_effect_id": 9, "vol_l": 100, "vol_r": 100}
+2026-06-05 20:37:20,432 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_883", "current_note": 9}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+2026-06-05 20:37:33,672 - DEBUG - TX -> {"trace_id": "req-8cde3496", "message_type": "trigger", "chladni_id": "CHLADNI_525", "music_note": 4, "led_effect_id": 4, "vol_l": 100, "vol_r": 100}
+2026-06-05 20:37:33,681 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_525", "current_note": 4}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+2026-06-05 20:54:03,898 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-05 20:54:14,517 - DEBUG - TX -> {"trace_id": "req-c459ea12", "message_type": "trigger", "chladni_id": "CHLADNI_883", "music_note": 9, "led_effect_id": 9, "vol_l": 100, "vol_r": 100}
+2026-06-05 20:54:14,530 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_883", "current_note": 9}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+2026-06-05 20:54:32,846 - DEBUG - TX -> {"trace_id": "req-0f7358f3", "message_type": "trigger", "chladni_id": "CHLADNI_655", "music_note": 5, "led_effect_id": 5, "vol_l": 100, "vol_r": 100}
+2026-06-05 20:54:32,847 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_655", "current_note": 5}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}
+2026-06-05 20:54:40,977 - DEBUG - TX -> {"trace_id": "req-09e9cd96", "message_type": "trigger", "chladni_id": "CHLADNI_525", "music_note": 4, "led_effect_id": 4, "vol_l": 100, "vol_r": 100}
+2026-06-05 20:54:40,979 - DEBUG - RX <- {"active_state": {"current_chladni_id": "CHLADNI_525", "current_note": 4}, "diagnostics": {"hdmi_audio": 0, "pd_udp": 1, "pico_serial": 1, "usb_audio": 0}, "status": "ok"}

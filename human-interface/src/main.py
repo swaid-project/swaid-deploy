@@ -9,7 +9,7 @@ from PySide6.QtCore import QPointF, QRectF
 sys.path.append(str(Path(__file__).parent))
 
 from network.resonance_client import ResonanceClient
-from vision.hand_tracking import HandTrackingThread, FALLBACK_CAMERA_CHOICES, default_camera_source
+from vision.hand_tracking import HandTrackingThread, FALLBACK_CAMERA_CHOICES, default_camera_source, _is_capture_device
 from ui.interface import MainWindow
 from ui.dashboard import TestingOverlay
 from ui.settings import CameraSettingsDialog
@@ -74,12 +74,11 @@ def main():
 
     def on_camera_error(failed_index, msg):
         print(f"[Main] Camera {failed_index} error: {msg}")
-        # Discover all video devices at runtime so a USB webcam at any index is found
-        discovered = sorted(
-            Path("/dev").glob("video*"),
-            key=lambda p: int(p.name[5:] or 0)
-        )
-        all_sources = [str(d) for d in discovered] if discovered else [0, 1, 2, 3]
+        # Only consider real capture devices (sysfs index 0) — skip metadata/control streams
+        all_sources = [
+            str(d) for d in sorted(Path("/dev").glob("video*"), key=lambda p: int(p.name[5:] or 0))
+            if _is_capture_device(d)
+        ] or ["/dev/video0"]
         remaining = [s for s in all_sources if s != str(failed_index) and s != failed_index]
         if remaining and not state["camera_fallback_tried"]:
             state["camera_fallback_tried"] = True

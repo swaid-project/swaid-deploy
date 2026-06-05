@@ -30,8 +30,6 @@ struct Generator {
 
 struct AudioRouting {
     std::string transducer_device_name;
-    std::string music_device_name;
-    std::vector<int> music_channels;
     std::unordered_map<int, int> logical_to_physical_transducer;
 };
 
@@ -39,7 +37,8 @@ struct SystemConfig {
     AudioRouting routing;
     std::string zmq_endpoint;
     int pico_baud_rate;
-    std::string pd_patch_path;
+    int pd_udp_port{3000};
+    int pd_udp_mute_port{3001};
 };
 
 // --- System constants
@@ -53,21 +52,14 @@ extern std::atomic<double> measuredLatency;
 extern std::atomic<bool> headsetMode; 
 extern std::atomic<bool> masterMute;
 extern std::atomic<bool> musicMute;
-extern std::atomic<float> musicVolL;
-extern std::atomic<float> musicVolR;
 
-// Device indices resolved at runtime
+// Device index resolved at runtime
 extern std::atomic<int> transducerDeviceIdx;
-extern std::atomic<int> musicDeviceIdx;
 
 // Diagnostic state (1 = OK, 0 = Lost/Polling)
 extern std::atomic<int> diag_pico_serial;
 extern std::atomic<int> diag_usb_audio;
 extern std::atomic<int> diag_hdmi_audio;
-extern std::atomic<bool> pd_patch_loaded; // Global safeguard for PD status
-
-// Cross-thread libpd note dispatch: ZMQ thread stores, audio callback consumes
-extern std::atomic<int> pendingLibpdNote;
 
 // --- Constants 
 extern const double PI;
@@ -81,31 +73,10 @@ bool loadSystemConfig(const std::string& path);
 int findAudioDeviceByName(const std::string& nameSubstr, int minChannels = 2);
 
 // --- Sending the pattern to the soundcard generators
-// Updated: Removed fade_transition string to hardcode 100ms
 void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l = 100, int vol_r = 100);
 
 // --- Helper function to reset all generators
 void resetGenerators();
-
-/**
- * @brief Combined callback for when music and transducers are on the same device.
- */
-int audioCallback(const void *inputBuffer, 
-                  void *outputBuffer,
-                  unsigned long framesPerBuffer,
-                  const PaStreamCallbackTimeInfo* timeInfo,
-                  PaStreamCallbackFlags statusFlags,
-                  void *userData);
-
-/**
- * @brief Dedicated callback for music output (e.g., HDMI).
- */
-int musicCallback(const void *inputBuffer, 
-                  void *outputBuffer,
-                  unsigned long framesPerBuffer,
-                  const PaStreamCallbackTimeInfo* timeInfo,
-                  PaStreamCallbackFlags statusFlags,
-                  void *userData);
 
 /**
  * @brief Dedicated callback for transducer output (USB Soundcard).

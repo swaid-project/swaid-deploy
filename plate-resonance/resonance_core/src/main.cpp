@@ -83,51 +83,25 @@ int main() {
 
 bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream) {
     int t_idx = findAudioDeviceByName(systemConfig.routing.transducer_device_name, NUM_CHANNELS);
-    int m_idx = findAudioDeviceByName(systemConfig.routing.music_device_name, 2);
-
-    if (t_idx == -1 || m_idx == -1) return false;
+    if (t_idx == -1) return false;
 
     transducerDeviceIdx.store(t_idx);
-    musicDeviceIdx.store(m_idx);
+    *m_stream = nullptr; // PureData handles music — no second PortAudio stream needed
 
     PaStreamParameters t_params;
-    t_params.device = t_idx;
-    t_params.channelCount = NUM_CHANNELS;
-    t_params.sampleFormat = paFloat32;
-    t_params.suggestedLatency = Pa_GetDeviceInfo(t_idx)->defaultLowOutputLatency;
+    t_params.device                    = t_idx;
+    t_params.channelCount              = NUM_CHANNELS;
+    t_params.sampleFormat              = paFloat32;
+    t_params.suggestedLatency          = Pa_GetDeviceInfo(t_idx)->defaultLowOutputLatency;
     t_params.hostApiSpecificStreamInfo = nullptr;
 
-    if (t_idx == m_idx) {
-        PaError err = Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, audioCallback, nullptr);
-        if (err != paNoError) {
-            std::cerr << "[Audio] Failed to open Combined stream: " << Pa_GetErrorText(err) << "\n";
-            return false;
-        }
-        Pa_StartStream(*t_stream);
-        *m_stream = nullptr; 
-    } else {
-        PaError err_t = Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, transducerCallback, nullptr);
-        if (err_t != paNoError) {
-            std::cerr << "[Audio] Failed to open Transducer stream (Dev " << t_idx << "): " << Pa_GetErrorText(err_t) << "\n";
-            return false;
-        }
-        
-        PaStreamParameters m_params;
-        m_params.device = m_idx;
-        m_params.channelCount = 2;
-        m_params.sampleFormat = paFloat32;
-        m_params.suggestedLatency = Pa_GetDeviceInfo(m_idx)->defaultLowOutputLatency;
-        m_params.hostApiSpecificStreamInfo = nullptr;
-
-        PaError err_m = Pa_OpenStream(m_stream, nullptr, &m_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, musicCallback, nullptr);
-        if (err_m != paNoError) {
-            std::cerr << "[Audio] Failed to open Music stream (Dev " << m_idx << "): " << Pa_GetErrorText(err_m) << "\n";
-            if (*t_stream) { Pa_CloseStream(*t_stream); *t_stream = nullptr; }
-            return false;
-        }
-        
-        Pa_StartStream(*t_stream);
-        Pa_StartStream(*m_stream);
+    PaError err = Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER,
+                                paNoFlag, transducerCallback, nullptr);
+    if (err != paNoError) {
+        std::cerr << "[Audio] Failed to open Transducer stream: " << Pa_GetErrorText(err) << "\n";
+        return false;
     }
+
+    Pa_StartStream(*t_stream);
     return true;
 }

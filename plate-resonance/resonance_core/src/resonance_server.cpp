@@ -2,9 +2,7 @@
 #include "../include/lock_free_queue.hpp"
 #include "../../soundcard/include/audio_driver.hpp"
 #include "../../led_driver/include/embedded_sal.hpp"
-
-// libpd
-#include "z_libpd.h"
+#include "puredata_sender.hpp"
 
 #include <fstream>
 
@@ -16,8 +14,11 @@ LockFreeQueue<int> ledQueue;
 
 // Hardware Background Worker State
 std::atomic<bool> hardwareWorkerRunning{false};
-std::atomic<bool> pd_patch_loaded{false}; // SAFEGUARD FLAG
 std::thread hardwareWorker;
+
+// PureData UDP senders — both owned by jsonListenerThread, init'd after config load
+PureDataSender pdSender;     // port 3000 — note values (0-11)
+PureDataSender pdMuteSender; // port 3001 — toggle mute/unmute (any message)
 
 // Global catalogue maps
 std::unordered_map<std::string, json> catalogue;
@@ -26,14 +27,6 @@ std::unordered_map<int, std::string> musicNoteMap;
 // Global tracker for current note to prevent UI flickering
 static std::atomic<int> current_playing_note{-1};
 static std::string current_active_chladni = "NONE";
-
-/**
- * @brief Simple receiver for libpd messages.
- */
-void pd_float_hook(const char *source, float value) {
-    // Continuous sync logic removed. Hardware strictly follows ZMQ triggers.
-    (void)source; (void)value;
-}
 
 void hardwareWorkerThread() {
     std::optional<int> pendingRetry;
@@ -86,6 +79,7 @@ json build_full_reply(const std::string& status) {
     r["diagnostics"]["pico_serial"] = diag_pico_serial.load();
     r["diagnostics"]["usb_audio"]   = diag_usb_audio.load();
     r["diagnostics"]["hdmi_audio"]  = diag_hdmi_audio.load();
+    r["diagnostics"]["pd_udp"]      = pdSender.isReady() ? 1 : 0;
 
     // Active State (Piggybacking)
     r["active_state"]["current_note"] = current_playing_note.load();
@@ -134,24 +128,14 @@ void jsonListenerThread() {
         std::cerr << "Warning: Catalogue empty or not found at " << CATALOGUE_PATH << "\n";
     }
 
-    // Initialize libpd
-    libpd_set_floathook(pd_float_hook);
-    libpd_init();
-    libpd_init_audio(2, 2, SAMPLE_RATE); 
-    
-    int pd_block_size = libpd_blocksize();
-    std::cout << "[libpd] Initialized. Block size: " << pd_block_size << "\n";
-
-    // Load the PureData patch
-    void* patch = libpd_openfile("file1.pd", systemConfig.pd_patch_path.c_str());
-    if (!patch) {
-        std::cerr << "[libpd] ERROR: Could not open file1.pd in " << systemConfig.pd_patch_path << "\n";
-        pd_patch_loaded.store(false);
-    } else {
-        pd_patch_loaded.store(true);
-        libpd_start_message(1);
-        libpd_add_float(1.0f);
-        libpd_finish_message("pd", "dsp");
+    // Initialize PureData UDP senders
+    if (!pdSender.init("127.0.0.1", systemConfig.pd_udp_port)) {
+        std::cerr << "[PD] WARNING: note sender init failed (port "
+                  << systemConfig.pd_udp_port << ") — music will be silent\n";
+    }
+    if (!pdMuteSender.init("127.0.0.1", systemConfig.pd_udp_mute_port)) {
+        std::cerr << "[PD] WARNING: mute sender init failed (port "
+                  << systemConfig.pd_udp_mute_port << ") — mute control unavailable\n";
     }
 
     zmq::context_t context(1);
@@ -244,8 +228,10 @@ void jsonListenerThread() {
             std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect 
                       << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
 
-            // 1. Seed PureData (consumed by audio callback on next block)
-            pendingLibpdNote.store(music_note, std::memory_order_release);
+            // 1. Send note to external PureData process via UDP
+            if (!masterMute.load() && !musicMute.load()) {
+                pdSender.sendNote(music_note);
+            }
 
             // 2. Immediate Hardware Dispatch
             ledQueue.push(led_effect);
@@ -287,7 +273,10 @@ void jsonListenerThread() {
             if (message["command"].contains("music_mute")) {
                 bool mute = message["command"]["music_mute"].get<bool>();
                 musicMute.store(mute);
-                if (mute) pendingLibpdNote.store(-1, std::memory_order_release);
+                // Toggle PD's internal mute gate (any message flips state; PD starts unmuted)
+                pdMuteSender.sendNote(1);
+                std::cout << "[PD] Mute toggle sent → PD music now "
+                          << (mute ? "MUTED" : "UNMUTED") << "\n";
             }
             std::string reply_str = build_full_reply("ok").dump();
             std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";

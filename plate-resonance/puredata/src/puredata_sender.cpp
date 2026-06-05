@@ -1,5 +1,6 @@
 #include "puredata_sender.hpp"
 #include <iostream>
+#include <sstream>
 #include <cstring>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -10,45 +11,59 @@ PureDataSender::PureDataSender() : sockfd(-1) {
 }
 
 PureDataSender::~PureDataSender() {
-    if (sockfd != -1) {
-        close(sockfd);
-    }
+    if (sockfd >= 0) close(sockfd);
 }
 
 bool PureDataSender::init(const std::string& ip, int port) {
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        std::cerr << "[PureData SAL] UDP socket creation failed\n";
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        std::cerr << "[PD] UDP socket creation failed\n";
         return false;
     }
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(port);
-    
+    servaddr.sin_port   = htons(port);
+
     if (inet_pton(AF_INET, ip.c_str(), &servaddr.sin_addr) <= 0) {
-        std::cerr << "[PureData SAL] Invalid address / Address not supported\n";
+        std::cerr << "[PD] Invalid address: " << ip << "\n";
         close(sockfd);
         sockfd = -1;
         return false;
     }
 
-    std::cout << "[PureData SAL] Native UDP initialized on " << ip << ":" << port << "\n";
+    std::cout << "[PD] UDP sender ready → " << ip << ":" << port << "\n";
     return true;
 }
 
 void PureDataSender::sendNote(int note) {
-    if (sockfd < 0) return;
-    
-    // Check if number is within reasonable bounds (following legacy puredata.cpp)
-    if (note < 0 || note > 127) {
-        std::cerr << "[PureData SAL] Warning: Note " << note << " is potentially out of MIDI bounds\n";
+    if (sockfd < 0) {
+        ++m_sendErrors;
+        std::cerr << "[PD] sendNote(" << note << ") failed — socket not ready\n";
+        return;
     }
 
     std::string msg = std::to_string(note) + ";\n"; // FUDI protocol
-    ssize_t sent = sendto(sockfd, msg.c_str(), msg.length(), 0, 
-                          (const struct sockaddr *)&servaddr, sizeof(servaddr));
-    
+    ssize_t sent = sendto(sockfd, msg.c_str(), msg.size(), 0,
+                          reinterpret_cast<const struct sockaddr*>(&servaddr),
+                          sizeof(servaddr));
     if (sent < 0) {
-        std::cerr << "[PureData SAL] Error sending UDP packet\n";
+        ++m_sendErrors;
+        std::cerr << "[PD] sendto failed — note=" << note
+                  << " total_errors=" << m_sendErrors << "\n";
+    } else {
+        ++m_notesSent;
+        m_lastNote = note;
+        std::cout << "[PD] Note sent: " << note
+                  << " (total=" << m_notesSent << ")\n";
     }
+}
+
+std::string PureDataSender::debugInfo() const {
+    std::ostringstream oss;
+    oss << "ready=" << (sockfd >= 0 ? "yes" : "no")
+        << " sent="   << m_notesSent
+        << " errors=" << m_sendErrors
+        << " last="   << m_lastNote;
+    return oss.str();
 }

@@ -40,7 +40,6 @@ void populateMaps(const std::string& file);
 
 // --- Hearing the SDK connection
 extern std::atomic<bool> hardwareWorkerRunning;
-extern std::atomic<bool> pd_patch_loaded; // Add this
 void hardwareWorkerThread();
 
 void jsonListenerThread();

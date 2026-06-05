@@ -10,12 +10,6 @@ find_package(Threads REQUIRED)
 # ── Includes ────────────────────────────────────────────────────────────────
 include_directories(include)
 
-# libpd paths
-include(FetchContent)
-FetchContent_GetProperties(libpd)
-include_directories(${libpd_SOURCE_DIR}/libpd_wrapper)
-include_directories(${libpd_SOURCE_DIR}/pure-data/src)
-
 # ── Sources ─────────────────────────────────────────────────────────────────
 set(SOUNDCARD_SOURCES
     src/audio_driver.cpp

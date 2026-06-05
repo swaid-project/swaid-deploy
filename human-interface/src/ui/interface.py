@@ -182,6 +182,8 @@ class MainWindow(QWidget):
             self.warning_banner.show_warning("WARNING: USB Soundcard Disconnected. Attempting recovery...", critical=False)
         elif self.client.diagnostics.get("pico_serial") == 0:
             self.warning_banner.show_warning("WARNING: LED Controller Disconnected. Attempting recovery...", critical=False)
+        elif self.client.diagnostics.get("pd_udp") == 0:
+            self.warning_banner.show_warning("WARNING: PureData UDP not ready — music may be silent", critical=False)
         else:
             self.warning_banner.hide_warning()
 

@@ -3,32 +3,25 @@
 #include <string>
 #include <netinet/in.h>
 
-/**
- * @brief PureData UDP Sender Library
- * 
- * Provides a simple interface to send MIDI-style notes or values
- * to PureData via UDP (FUDI protocol).
- */
 class PureDataSender {
 public:
     PureDataSender();
     ~PureDataSender();
-    
-    /**
-     * @brief Initialize the UDP socket
-     * @param ip Target IP address (e.g., "127.0.0.1")
-     * @param port Target port (e.g., 3000)
-     * @return true if successful, false otherwise
-     */
+
     bool init(const std::string& ip, int port);
-    
-    /**
-     * @brief Send a note value to PureData
-     * @param note The note integer to send
-     */
     void sendNote(int note);
 
+    // Debug interface — counters are plain ints (single-thread access from jsonListenerThread)
+    bool        isReady()      const { return sockfd >= 0; }
+    int         notesSent()    const { return m_notesSent; }
+    int         sendErrors()   const { return m_sendErrors; }
+    int         lastNoteSent() const { return m_lastNote; }
+    std::string debugInfo()    const;
+
 private:
-    int sockfd;
-    struct sockaddr_in servaddr;
+    int                sockfd{-1};
+    struct sockaddr_in servaddr{};
+    int                m_notesSent{0};
+    int                m_sendErrors{0};
+    int                m_lastNote{-1};
 };

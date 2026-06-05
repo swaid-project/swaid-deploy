@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Define absolute or safe relative paths
 ROOT_DIR="$(pwd)"
 CORE_EXE="$ROOT_DIR/plate-resonance/build/resonance_core/resonance_core"
 UI_EXE="$ROOT_DIR/human-interface/dist/SWAID_Interface/SWAID_Interface"
+PD_PATCH="$ROOT_DIR/MusicSynthesis/file1.pd"
 
 # 1. Verification
 if [ ! -f "$CORE_EXE" ]; then
@@ -16,34 +16,44 @@ if [ ! -f "$UI_EXE" ]; then
     exit 1
 fi
 
+if [ ! -f "$PD_PATCH" ]; then
+    echo "ERROR: PureData patch not found at $PD_PATCH"
+    exit 1
+fi
+
 echo "========================================"
 echo "    Launching SWAID System (Production) "
 echo "========================================"
 
-# 2. Trap SIGINT (Ctrl+C) and SIGTERM to kill all background processes safely
-trap 'echo "\n[Launcher] Shutting down system..."; kill $CORE_PID $UI_PID 2>/dev/null; exit' SIGINT SIGTERM
+# 2. Trap SIGINT/SIGTERM — kill all background processes on exit
+trap 'echo "[Launcher] Shutting down system..."; kill $PD_PID $CORE_PID $UI_PID 2>/dev/null; wait $PD_PID $CORE_PID 2>/dev/null; exit' SIGINT SIGTERM
 
-# 3. Launch the C++ Core in the background
+# 3. Launch PureData in headless mode (audio output configured via QPWgraph)
+echo "[Launcher] Starting PureData..."
+pd -nogui "$PD_PATCH" > "$ROOT_DIR/pd.log" 2>&1 &
+PD_PID=$!
+
+# Give PD time to bind UDP ports 3000/3001 before the server starts sending notes
+sleep 1
+
+# 4. Launch the C++ Core (relative paths expect cwd = plate-resonance/)
 echo "[Launcher] Starting Plate Resonance Server..."
-# The Core relies on relative paths (e.g. "../master_symbols.json") 
-# Assuming it was built to run from plate-resonance/
 cd "$ROOT_DIR/plate-resonance"
 "$CORE_EXE" &
 CORE_PID=$!
 cd "$ROOT_DIR"
 
-# Wait 2 seconds to allow the C++ Server to bind the ZeroMQ port and initialize PortAudio
+# Wait 2 seconds to allow the ZeroMQ socket to bind before the UI connects
 sleep 2
 
-# 4. Launch the Python UI in the background
+# 5. Launch the Python UI
 echo "[Launcher] Starting Human Interface Client..."
 "$UI_EXE" &
 UI_PID=$!
 
-# 5. Wait for both processes. If either crashes or closes, the script moves on.
+# 6. Wait for UI — when it closes, shut everything else down
 wait $UI_PID
 echo "[Launcher] UI Closed."
 
-# 6. Safe Cleanup: When the UI closes naturally, kill the background server.
-kill $CORE_PID 2>/dev/null
+kill $CORE_PID $PD_PID 2>/dev/null
 echo "[Launcher] System Shutdown Complete."

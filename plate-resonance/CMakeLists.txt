@@ -92,21 +92,6 @@ if(NOT TARGET stb)
     target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
 endif()
 
-# 7. libpd
-FetchContent_Declare(
-    libpd
-    GIT_REPOSITORY https://github.com/libpd/libpd.git
-    GIT_TAG master
-)
-FetchContent_GetProperties(libpd)
-if(NOT libpd_POPULATED)
-    FetchContent_Populate(libpd)
-    # libpd uses a custom Makefile-based build system, so we don't add_subdirectory.
-    # Instead, we define an interface library that will point to the headers and 
-    # the static library that we'll build in the resonance_core build step or here.
-    # For now, we just make the source dir available to resonance_core.
-endif()
-
 # --- Subdirectories ---
 # Order matters if there are internal dependencies
 add_subdirectory(puredata)

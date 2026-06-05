@@ -3,9 +3,6 @@
 #include <algorithm>
 #include <vector>
 
-// libpd
-#include "z_libpd.h"
-
 // --- Audio Device Discovery
 int findAudioDeviceByName(const std::string& nameSubstr, int minChannels) {
     int numDevices = Pa_GetDeviceCount();
@@ -41,17 +38,16 @@ bool loadSystemConfig(const std::string& path) {
         f >> j;
         
         systemConfig.routing.transducer_device_name = j["audio_routing"]["transducer_device_name"];
-        systemConfig.routing.music_device_name = j["audio_routing"]["music_device_name"];
-        systemConfig.routing.music_channels = j["audio_routing"]["music_channels"].get<std::vector<int>>();
-        
+
         for (auto& [key, value] : j["audio_routing"]["transducer_channels"].items()) {
             int logical = std::stoi(key.substr(8)); // logical_X
             systemConfig.routing.logical_to_physical_transducer[logical] = value.get<int>();
         }
 
-        systemConfig.zmq_endpoint = j["communication"]["zmq_endpoint"];
+        systemConfig.zmq_endpoint  = j["communication"]["zmq_endpoint"];
         systemConfig.pico_baud_rate = j["communication"]["pico_baud_rate"];
-        systemConfig.pd_patch_path = j["communication"]["pd_patch_path"];
+        systemConfig.pd_udp_port      = j["communication"].value("pd_udp_port", 3000);
+        systemConfig.pd_udp_mute_port = j["communication"].value("pd_udp_mute_port", 3001);
 
         SAMPLE_RATE = j["audio_routing"]["sample_rate"];
 
@@ -64,6 +60,7 @@ bool loadSystemConfig(const std::string& path) {
 }
 
 void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l, int vol_r) {
+    (void)vol_l; (void)vol_r;
     auto it = catalogue.find(symbol_id);
     if (it == catalogue.end()) return;
 
@@ -74,11 +71,6 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
     for (int i = 0; i < NUM_GENERATORS; i++)
         fromAmps[i] = generators[i].amp.load();
  
-    float normL = std::clamp(vol_l, 0, 100) / 100.0f;
-    float normR = std::clamp(vol_r, 0, 100) / 100.0f;
-    musicVolL.store(normL);
-    musicVolR.store(normR);
-
     if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
         for (const auto& t : pattern["hardware_config"]["channels"]) {
             int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
@@ -141,73 +133,6 @@ void generateSineWaves(float* outBuffer, unsigned long frames, int numOutChannel
             outBuffer[i * numOutChannels + genIdx] += sample;
         }
     }
-}
-
-void mixMusic(float* outBuffer, unsigned long frames, int numOutChannels) {
-    // SAFEGUARD
-    if (musicMute.load() || !pd_patch_loaded.load()) return;
-
-    std::vector<float> pdOut(frames * 2);
-    int ticks = frames / libpd_blocksize();
-    libpd_process_float(ticks, nullptr, pdOut.data());
-
-    float mVolL = musicVolL.load();
-    float mVolR = musicVolR.load();
-
-    for (unsigned int i = 0; i < frames; i++) {
-        float leftMusic = pdOut[i * 2] * mVolL;
-        float rightMusic = pdOut[i * 2 + 1] * mVolR;
-        for (int music_ch : systemConfig.routing.music_channels) {
-            int idx = music_ch - 1;
-            if (idx >= 0 && idx < numOutChannels) {
-                if (music_ch == systemConfig.routing.music_channels[0])
-                    outBuffer[i * numOutChannels + idx] += leftMusic;
-                else
-                    outBuffer[i * numOutChannels + idx] += rightMusic;
-            }
-        }
-    }
-}
-
-int audioCallback(const void *inputBuffer, void *outputBuffer,
-                         unsigned long framesPerBuffer,
-                         const PaStreamCallbackTimeInfo* timeInfo,
-                         PaStreamCallbackFlags statusFlags,
-                         void *userData) {
-    (void) inputBuffer; (void) statusFlags; (void) userData;
-    measuredLatency.store((timeInfo->outputBufferDacTime - timeInfo->currentTime) * 1000.0);
-    float *out = (float*)outputBuffer;
-    for (unsigned int i = 0; i < framesPerBuffer * NUM_CHANNELS; i++) out[i] = 0.0f;
-    if (masterMute.load()) return paContinue;
-    int pending = pendingLibpdNote.exchange(-2, std::memory_order_acq_rel);
-    if (pending != -2) libpd_float("from_core", (float)pending);
-    mixMusic(out, framesPerBuffer, NUM_CHANNELS);
-    generateSineWaves(out, framesPerBuffer, NUM_CHANNELS);
-    return paContinue;
-}
-
-int musicCallback(const void *inputBuffer, void *outputBuffer,
-                         unsigned long framesPerBuffer,
-                         const PaStreamCallbackTimeInfo* timeInfo,
-                         PaStreamCallbackFlags statusFlags,
-                         void *userData) {
-    (void) inputBuffer; (void) statusFlags; (void) userData; (void) timeInfo;
-    float *out = (float*)outputBuffer;
-    int channels = 2; 
-    for (unsigned int i = 0; i < framesPerBuffer * channels; i++) out[i] = 0.0f;
-    if (masterMute.load() || musicMute.load() || !pd_patch_loaded.load()) return paContinue;
-    int pending = pendingLibpdNote.exchange(-2, std::memory_order_acq_rel);
-    if (pending != -2) libpd_float("from_core", (float)pending);
-    std::vector<float> pdOut(framesPerBuffer * 2);
-    int ticks = framesPerBuffer / libpd_blocksize();
-    libpd_process_float(ticks, nullptr, pdOut.data());
-    float mVolL = musicVolL.load();
-    float mVolR = musicVolR.load();
-    for (unsigned int i = 0; i < framesPerBuffer; i++) {
-        out[i * channels + 0] = pdOut[i * 2] * mVolL;
-        out[i * channels + 1] = pdOut[i * 2 + 1] * mVolR;
-    }
-    return paContinue;
 }
 
 int transducerCallback(const void *inputBuffer, void *outputBuffer,

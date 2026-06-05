@@ -112,11 +112,10 @@ def open_camera(source):
             _add(str(dev))
 
     for c in candidates:
-        # Never specify CAP_V4L2 explicitly: OpenCV's V4L2 backend fails on UVC
-        # cameras that don't support VIDIOC_G_INPUT and corrupts kernel device
-        # state, causing every subsequent open attempt in this process to also
-        # fail.  The default (FFMPEG) backend opens UVC devices correctly.
-        cap = cv2.VideoCapture(c)
+        # Force CAP_FFMPEG: avoids GStreamer (which fails silently on UVC cameras)
+        # and avoids CAP_V4L2 (which corrupts kernel device state via VIDIOC_G_INPUT
+        # on cameras that don't support it, causing all subsequent opens to fail too).
+        cap = cv2.VideoCapture(c, cv2.CAP_FFMPEG)
         if cap.isOpened():
             return cap
         cap.release()
