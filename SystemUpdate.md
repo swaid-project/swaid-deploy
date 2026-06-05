@@ -1,102 +1,184 @@
-# Architectural Update Specification: Disabling Continuous Synchronization
+### 1. Analysis & Fix for Issue 1: Server fails on re-run / Segmentation Fault
 
-**Version:** 8.1 (Feature Reversion & Toggle)
-**Author:** Chief Software Engineer
+**The Cause:** When you close the Python UI, the `swaid_launcher.sh` script executes `kill $CORE_PID`. By default, this sends a `SIGTERM` signal, which instantly aborts the C++ Core. Because the C++ program is forcefully killed, **it never executes `Pa_CloseStream()` or `Pa_Terminate()**`.
+The Linux ALSA audio driver is left holding memory locks and the USB interface. When you try to run the application a second time, PortAudio fails to initialize properly, leading to a segmentation fault when the program attempts to access the locked audio buffers.
 
-**Target Audience:** Plate Resonance Team (C++)
+**The Fix (Graceful Shutdown):** We must add a Signal Handler to the C++ Core so it catches the `kill` command, stops its threads, and cleanly releases the soundcard back to the OS.
 
-**Date:** June 2026
-
-## 1. Executive Summary
-
-Following alignment with the Human-Interface team, the system behavior is being adjusted. The Chladni plate and LEDs should only react to the explicit `trigger` command sent by the UI. While the embedded `libpd` instance will continue to generate its autonomous musical sequence, the C++ Core will ignore the subsequent note changes rather than continuously synchronizing the physical hardware to them.
-
-To preserve the engineering effort put into the continuous synchronization feature, **do not delete the code.** We will implement a compile-time toggle to disable the feedback loop and restore the direct hardware dispatch in the ZMQ listener.
-
----
-
-## 2. Implementation Steps (`resonance_server.cpp`)
-
-### **Step 1: Implement the Compile-Time Toggle**
-
-At the top of `resonance_server.cpp` (below the includes), define a macro switch. This allows us to instantly reactivate the feature in the future by simply changing a `0` to a `1`.
+**Update `plate-resonance/resonance_core/src/main.cpp`:**
+Add the `<csignal>` library and the handler at the top of the file, and register it inside `main()`:
 
 ```cpp
-// Set to 1 to enable continuous hardware sync with PureData notes
-// Set to 0 to only sync on the initial ZMQ trigger
-#define CONTINUOUS_SYNC_ENABLED 0
+#include "../include/resonance_server.hpp"
+#include "../../soundcard/include/audio_driver.hpp"
+#include "../../led_driver/include/embedded_sal.hpp"
+#include <csignal> // Add this
+
+// Add this handler function
+void handle_sigint(int sig) {
+    std::cout << "\n\n[Core] Caught signal " << sig << ". Commencing graceful shutdown...\n";
+    jsonLive.store(false);
+    hardwareWorkerRunning.store(false);
+}
+
+int main() {
+    // Register the signal handlers right at the start
+    std::signal(SIGINT, handle_sigint);
+    std::signal(SIGTERM, handle_sigint);
+
+    // 1. Load System Configuration
+    // ... (rest of main.cpp remains the same)
 
 ```
 
-### **Step 2: Bypass the PureData Hook**
+*Now, when the launcher script kills the Core, it will wait for the threads to join, release the soundcard, and the second run will work perfectly.*
 
-Locate the `pd_float_hook` function. We will use the macro to compile out the execution logic. The hook will still technically be called by `libpd`, but it will instantly return without touching the atomic variables or the Lock-Free Queue.
+---
+
+### 2. Analysis & Fix for Issue 2: Pico Never Connects
+
+**The Cause:** There are two likely reasons for this.
+
+1. **Permissions:** On Linux, normal users do not have permission to read/write to `/dev/ttyACM0` (the USB Serial port). You must add your user to the `dialout` group.
+2. **Blind Discovery:** The `findPicoPort()` function currently fails silently, so you have no idea *why* it's failing.
+
+**The Fix:**
+First, run this command in your terminal to grant your user serial port access (you must restart your computer/logout for it to take effect):
+`sudo usermod -a -G dialout $USER`
+
+Second, let's add verbose error logging to the Pico discovery.
+**Update `plate-resonance/led_driver/src/embedded_sal.cpp`:**
 
 ```cpp
-void pd_float_hook(const char *source, float value) {
-#if CONTINUOUS_SYNC_ENABLED
-    if (std::string(source) == "to_core") {
-        int note = static_cast<int>(value);
-        
-        if (note != current_playing_note) {
-            current_playing_note = note; 
-            
-            if (musicNoteMap.count(note)) {
-                current_active_chladni = musicNoteMap[note]; 
-                // ... (Existing transducer update logic) ...
-            } else {
-                current_active_chladni = "UNKNOWN";
+int EmbeddedSAL::findPicoPort() {
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir("/dev")) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            std::string name(ent->d_name);
+            if (name.find("ttyACM") != std::string::npos || name.find("ttyUSB") != std::string::npos) {
+                std::string full_path = "/dev/" + name;
+
+                std::cout << "[LED SAL] Attempting to open port: " << full_path << " ...\n";
+                int fd = open(full_path.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
+
+                if (fd >= 0) {
+                    std::cout << "[LED SAL] Successfully opened " << full_path << "\n";
+                    closedir(dir);
+                    return fd;
+                } else {
+                    // This will print EXACTLY why it failed (e.g., "Permission denied")
+                    std::cerr << "[LED SAL] Failed to open " << full_path << ": " << strerror(errno) << "\n";
+                }
             }
-            
-            ledQueue.push(note % 20); 
         }
+        closedir(dir);
     }
-#endif
+    return -1;
 }
 
 ```
 
-### **Step 3: Restore Direct Dispatch in the ZMQ Listener (CRITICAL)**
+---
 
-*Architectural Catch:* Because we previously relied on `pd_float_hook` to activate the transducers when a trigger was received, disabling the hook means the transducers will never turn on.
+### 3. Adding the "Deep Diagnostic" Logging (Server <-> Client)
 
-We must restore the explicit `applyPattern` and `ledQueue` calls inside the `jsonListenerThread` when a `"trigger"` command arrives.
+To verify that messages are actually flowing between the UI and the Core, we will inject print statements directly into the ZeroMQ network loops.
 
-```cpp
-// Inside jsonListenerThread, when parsing a "trigger" command:
+**A. Logging on the Python Client:**
+**Update `human-interface/src/network/resonance_client.py`:**
+Add `import logging` at the top, and modify the `_network_loop` to print exactly what leaves and enters the client.
 
-// 1. Seed the PureData sequencer (Remains unchanged)
-libpd_float("from_core", music_note);
+```python
+import logging
+# Add this near the top of the file to enable terminal prints
+logging.basicConfig(level=logging.DEBUG, format='[Python UI] %(message)s')
 
-// 2. Direct Hardware Dispatch (Restored)
-#if !CONTINUOUS_SYNC_ENABLED
-    // Manually apply the Chladni pattern and LED effect immediately
-    applyPattern(catalogue, chladni_id, "FAST"); // Utilizes the 100ms fade
-    ledQueue.push(led_effect_id);
-    
-    // Freeze the active state to the triggered values
-    current_playing_note = music_note;
-    current_active_chladni = chladni_id;
-#endif
+# ... inside the ResonanceClient class ...
+    def _network_loop(self):
+        socket = self._create_socket()
+
+        while self._running:
+            try:
+                payload = self._command_queue.get_nowait()
+            except queue.Empty:
+                payload = {"message_type": "ping"}
+
+            try:
+                # --- ADD LOGGING HERE ---
+                if payload["message_type"] != "ping": # We ignore pings so we don't spam the terminal
+                    logging.debug(f"TX -> {json.dumps(payload)}")
+
+                socket.send_json(payload)
+                response = socket.recv_json()
+
+                # --- ADD LOGGING HERE ---
+                if payload["message_type"] != "ping":
+                    logging.debug(f"RX <- {json.dumps(response)}")
+                # ... rest of the loop
 
 ```
 
-### **Step 4: Freeze the "Piggybacked" State**
-
-Because we wrapped the state updates in `#if !CONTINUOUS_SYNC_ENABLED`, the variables `current_playing_note` and `current_active_chladni` will now simply hold the values of the *last triggered symbol*.
-
-You do **not** need to comment out the JSON injection logic for the ZMQ replies.
+**B. Logging on the C++ Server:**
+**Update `plate-resonance/resonance_core/src/resonance_server.cpp`:**
+Inside the `jsonListenerThread()`, print the raw payloads immediately after receiving and before sending.
 
 ```cpp
-// Leave this exactly as it is. It will now safely report the static triggered state.
-reply["active_state"]["current_note"] = current_playing_note;
-reply["active_state"]["current_chladni_id"] = current_active_chladni;
+        // Inside jsonListenerThread, after receiving the message:
+        std::string payload(static_cast<char*>(msg.data()), msg.size());
+
+        json message;
+        try {
+            message = json::parse(payload);
+        } catch (const std::exception& e) { ... }
+
+        std::string type = message["message_type"].get<std::string>();
+
+        // --- ADD LOGGING HERE (Ignore ping spam) ---
+        if (type != "ping") {
+            std::cout << "\n[ZMQ Server RX] <- " << payload << "\n";
+        }
+
+        // ... command processing ...
+
+        // Example of modifying the reply to add a print:
+        if (type == "trigger") {
+            // ... processing ...
+
+            json reply;
+            reply["status"] = "ok";
+            // ... add diagnostics ...
+            std::string reply_str = reply.dump();
+
+            std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";
+            rep_socket.send(zmq::buffer(reply_str), zmq::send_flags::none);
+        }
 
 ```
 
 ---
 
-## 3. Impact Analysis
+### 4. The Debug Execution Plan
 
-* **C++ Core:** The audio thread is now even lighter, as it no longer updates transducer variables during playback. The Pico serial thread will only be invoked once per user interaction.
-* **Human-Interface:** The UI team can safely revert their high-frequency (20Hz) polling. They can return to the standard 1Hz heartbeat, as they no longer need to watch for spontaneous Chladni ID changes from the server.
+Once you make these code updates and run the `dialout` permission fix:
+
+1. Open your terminal.
+2. Run `make clean`, `make all`, and then `./swaid_launcher.sh`.
+3. **Watch the Terminal closely during boot:**
+* You should see `[LED SAL] Attempting to open port: /dev/ttyACM0 ...`
+* If it says `Permission denied`, you need to reboot your PC to apply the `dialout` group.
+* If it connects, the Pico is solved.
+
+
+4. **Interact with the UI:**
+* Trigger a symbol with your hand.
+* In the terminal, you should instantly see:
+`[Python UI] TX -> {"message_type": "trigger", ...}`
+`[ZMQ Server RX] <- {"message_type": "trigger", ...}`
+`[ZMQ Server TX] -> {"status": "ok", ...}`
+`[Python UI] RX <- {"status": "ok", ...}`
+
+
+5. **Close the UI Window:**
+* The terminal should output: `[Core] Caught signal 15. Commencing graceful shutdown...`
+* Run `./swaid_launcher.sh` again. It should boot up perfectly without a segmentation fault.

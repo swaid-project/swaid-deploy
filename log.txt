@@ -3,9 +3,13 @@
 ========================================
 [Launcher] Starting Plate Resonance Server...
 [Config] system_config.json loaded successfully.
-[Hardware Worker] Thread started.
 [Main] Services started. Entering Audio Watchdog loop.
 [Watchdog] Audio failure detected or initial boot. Rebuilding context...
+[Hardware Worker] Thread started.
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
 Found JSON Array with 12 elements.
 pd 0.56.3
 bonk version 1.5
@@ -13,10 +17,51 @@ fiddle version 1.1 TEST4
 pd~ version 0.54
 pique 0.1 for PD version 23
 [libpd] Initialized. Block size: 64
-file1.pd 102 1 114 0 (+~->*~) connection failed
 error: audio signal outlet connected to nonsignal inlet (ignored)
+error: audio signal outlet connected to nonsignal inlet (ignored)
+error: audio signal outlet connected to nonsignal inlet (ignored)
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
 LED Driver connection failed (Pico not found).
 ZeroMQ Server ready - listening on ipc:///tmp/swaid.sock (REQ/REP)
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
@@ -24,6 +69,10 @@ ALSA lib pcm_route.c:878:(find_matching_chmap) Found no matching channel map
 ALSA lib pcm_route.c:878:(find_matching_chmap) Found no matching channel map
 ALSA lib pcm_route.c:878:(find_matching_chmap) Found no matching channel map
 ALSA lib pcm_route.c:878:(find_matching_chmap) Found no matching channel map
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
 Cannot connect to server socket err = No such file or directory
 Cannot connect to server request channel
 jack server is not running or cannot be started
@@ -36,6 +85,10 @@ JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unloc
 JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
 ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
 ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Failed to open /dev/ttyACM0: Permission denied
+[LED SAL] Attempting to open ID port: /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00 ...
+[LED SAL] Failed to open /dev/serial/by-id/usb-Raspberry_Pi_Pico_2W_C8C0E543A4C96DF3-if00: Permission denied
 ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
 ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
 ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
@@ -46,21 +99,94 @@ Cannot connect to server request channel
 jack server is not running or cannot be started
 JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
 JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
-[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:2,0) (Index: 5)
-[Audio] Found device: HDA Intel PCH: LG TV (hw:0,3) (Index: 1)
+[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:2,0) (Index: 5 | Out: 8)
+[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:2,0) (Index: 5 | Out: 8)
 [Watchdog] Audio restored successfully.
-./swaid_launcher.sh: line 36: 253627 Segmentation fault      "$CORE_EXE"  (wd: ~/Documents/swaid-deploy/plate-resonance)
+./swaid_launcher.sh: line 36: 315206 Segmentation fault      "$CORE_EXE"  (wd: ~/Documents/swaid-deploy/plate-resonance)
 [Launcher] Starting Human Interface Client...
-INFO:matplotlib.font_manager:Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
-INFO:matplotlib.font_manager:Failed to extract font properties from /usr/share/fonts/opentype/cantarell/Cantarell-VF.otf: Can not load face (SFNT font table missing; error code 0x8e)
-INFO:matplotlib.font_manager:generated new fontManager
-INFO:ResonanceClient:ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+[Python UI] DEBUG: matplotlib data path: /home/swaid/Documents/swaid-deploy/human-interface/dist/SWAID_Interface/_internal/matplotlib/mpl-data
+[Python UI] DEBUG: CONFIGDIR=/tmp/tmpc08tz86g
+[Python UI] DEBUG: interactive is False
+[Python UI] DEBUG: platform is linux
+[Python UI] DEBUG: CACHEDIR=/tmp/tmpc08tz86g
+[Python UI] DEBUG: font search path [PosixPath('/home/swaid/Documents/swaid-deploy/human-interface/dist/SWAID_Interface/_internal/matplotlib/mpl-data/fonts/ttf'), PosixPath('/home/swaid/Documents/swaid-deploy/human-interface/dist/SWAID_Interface/_internal/matplotlib/mpl-data/fonts/afm'), PosixPath('/home/swaid/Documents/swaid-deploy/human-interface/dist/SWAID_Interface/_internal/matplotlib/mpl-data/fonts/pdfcorefonts')]
+[Python UI] INFO: Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+[Python UI] INFO: Failed to extract font properties from /usr/share/fonts/opentype/cantarell/Cantarell-VF.otf: Can not load face (SFNT font table missing; error code 0x8e)
+[Python UI] INFO: generated new fontManager
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] INFO: ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 84894
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 87055
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 87544
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 89472
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 90165
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 90795
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 93739
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 92978
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 92149
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 95799
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 101427
+[Python UI] DEBUG: STREAM b'IHDR' 16 13
+[Python UI] DEBUG: STREAM b'IDAT' 41 97291
 WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
-I0000 00:00:1780658316.063558  253699 gl_context_egl.cc:85] Successfully initialized EGL. Major : 1 Minor: 5
-I0000 00:00:1780658316.069181  253709 gl_context.cc:385] GL version: 3.2 (OpenGL ES 3.2 Mesa 25.0.7-2), renderer: Mesa Intel(R) HD Graphics 530 (SKL GT2)
+I0000 00:00:1780669283.041636  315278 gl_context_egl.cc:85] Successfully initialized EGL. Major : 1 Minor: 5
+I0000 00:00:1780669283.046479  315288 gl_context.cc:385] GL version: 3.2 (OpenGL ES 3.2 Mesa 25.0.7-2), renderer: Mesa Intel(R) HD Graphics 530 (SKL GT2)
 INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
-W0000 00:00:1780658316.102534  253702 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-W0000 00:00:1780658316.130110  253701 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-W0000 00:00:1780658317.126283  253704 landmark_projection_calculator.cc:78] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
-[Launcher] UI Closed.
-[Launcher] System Shutdown Complete.
+W0000 00:00:1780669283.074418  315281 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1780669283.101644  315283 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+W0000 00:00:1780669284.083221  315281 landmark_projection_calculator.cc:78] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: req-a3793841 | Payload: {'trace_id': 'req-a3793841', 'message_type': 'trigger', 'chladni_id': 'CHLADNI_525', 'music_note': 4, 'led_effect_id': 4, 'vol_l': 100, 'vol_r': 100}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: req-06dde394 | Payload: {'trace_id': 'req-06dde394', 'message_type': 'trigger', 'chladni_id': 'CHLADNI_655', 'music_note': 5, 'led_effect_id': 5, 'vol_l': 100, 'vol_r': 100}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+[Python UI] DEBUG: [SEND] Trace: ping-beat | Payload: {'message_type': 'ping'}
+
