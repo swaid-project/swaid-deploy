@@ -107,14 +107,8 @@ class CameraSettingsDialog(QDialog):
         layout.addRow(buttons)
 
     def _discover_cameras(self):
-        video_devices = sorted(Path("/dev").glob("video*"), key=lambda p: int(p.name.replace("video", "") or 0))
-        choices = []
-        for dev in video_devices:
-            # Check if it is a real capture device (simplified from legacy)
-            choices.append((f"Device {dev.name}", str(dev)))
-        if not choices:
-            choices = [("Camera 1 (indice 0)", 0), ("Camera 2 (indice 1)", 1)]
-        return choices
+        from vision.hand_tracking import discover_camera_choices
+        return discover_camera_choices()
 
     def _set_current(self, combo, val):
         for i in range(combo.count()):

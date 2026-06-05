@@ -9,7 +9,7 @@ from PySide6.QtCore import QPointF, QRectF
 sys.path.append(str(Path(__file__).parent))
 
 from network.resonance_client import ResonanceClient
-from vision.hand_tracking import HandTrackingThread, FALLBACK_CAMERA_CHOICES
+from vision.hand_tracking import HandTrackingThread, FALLBACK_CAMERA_CHOICES, default_camera_source
 from ui.interface import MainWindow
 from ui.dashboard import TestingOverlay
 from ui.settings import CameraSettingsDialog
@@ -44,9 +44,9 @@ def main():
     overlay = TestingOverlay(window)
     
     state = {
-        "tracking_camera": FALLBACK_CAMERA_CHOICES[0],
+        "tracking_camera": default_camera_source(),
         "center_mode": "live",
-        "center_camera": FALLBACK_CAMERA_CHOICES[0],
+        "center_camera": default_camera_source(),
         "tracker": None,
         "settings_dialog": None,
         "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0},

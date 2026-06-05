@@ -39,7 +39,50 @@ TRACKING_HOLD_SECONDS = 0.45
 LEFT_HAND_CLOSE_HOLD_SECONDS = 0.45
 
 LIVE_FOOTAGE_FPS = 20
-FALLBACK_CAMERA_CHOICES = [0, 1]
+
+# --- Sysfs helpers for V4L2 device classification ---
+
+def _sysfs_read(path) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+def _is_capture_device(device: Path) -> bool:
+    index = _sysfs_read(f"/sys/class/video4linux/{device.name}/index")
+    name  = _sysfs_read(f"/sys/class/video4linux/{device.name}/name").lower()
+    # UVC metadata/control streams sit at index 1+; skip them.
+    if "metadata" in name:
+        return False
+    return index in ("", "0")
+
+def _device_label(device: Path) -> str:
+    return _sysfs_read(f"/sys/class/video4linux/{device.name}/name") or device.name
+
+def discover_camera_choices():
+    """Return [(label, str_path)] for every real V4L2 capture device."""
+    devices = sorted(
+        (d for d in Path("/dev").glob("video*") if _is_capture_device(d)),
+        key=lambda p: int(p.name[5:] or 0),
+    )
+    if not devices:
+        return [("Camera 1 (/dev/video0)", "/dev/video0"),
+                ("Camera 2 (/dev/video1)", "/dev/video1")]
+    seen: set = set()
+    result = []
+    for dev in devices:
+        name = _device_label(dev)
+        suffix = f" ({sum(1 for s in seen if s == name) + 1})" if name in seen else ""
+        seen.add(name)
+        result.append((f"{name}{suffix} ({dev})", str(dev)))
+    return result
+
+def default_camera_source() -> str:
+    return discover_camera_choices()[0][1]
+
+FALLBACK_CAMERA_CHOICES = [c[1] for c in discover_camera_choices()]
+
+# --- Camera helpers ---
 
 def frame_to_qimage(frame):
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -56,25 +99,27 @@ def open_camera(source):
             seen.add(k)
             candidates.append(c)
 
+    # Prefer string path form — passing an integer index with no backend hint
+    # goes through V4L2 enumeration which breaks on many UVC cameras; a string
+    # path lets the FFMPEG backend open the device file directly.
+    if isinstance(source, int):
+        _add(f"/dev/video{source}")
     _add(source)
-    if isinstance(source, str) and source.startswith("/dev/video"):
-        try:
-            _add(int(Path(source).name.replace("video", "")))
-        except ValueError:
-            pass
 
-    # Scan all available video devices so any USB webcam is found regardless of index
+    # Append every real capture device (sysfs-filtered) as a further fallback
     for dev in sorted(Path("/dev").glob("video*"), key=lambda p: int(p.name[5:] or 0)):
-        _add(str(dev))
+        if _is_capture_device(dev):
+            _add(str(dev))
 
     for c in candidates:
-        for backend in (cv2.CAP_V4L2, cv2.CAP_ANY):
-            cap = cv2.VideoCapture(c, backend)
-            if cap.isOpened():
-                ok, _ = cap.read()
-                if ok:
-                    return cap
-            cap.release()
+        # Never specify CAP_V4L2 explicitly: OpenCV's V4L2 backend fails on UVC
+        # cameras that don't support VIDIOC_G_INPUT and corrupts kernel device
+        # state, causing every subsequent open attempt in this process to also
+        # fail.  The default (FFMPEG) backend opens UVC devices correctly.
+        cap = cv2.VideoCapture(c)
+        if cap.isOpened():
+            return cap
+        cap.release()
 
     return cv2.VideoCapture()
 
