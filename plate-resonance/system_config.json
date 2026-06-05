@@ -1,8 +1,8 @@
 {
     "audio_routing": {
         "sample_rate": 48000,
-        "transducer_device_name": "USB Audio CODEC",
-        "music_device_name": "HDMI",
+        "transducer_device_name": "ICUSBAUDIO7D",
+        "music_device_name": "LG TV",
         "music_channels": [1, 2],
         "transducer_channels": {
             "logical_1": 5,

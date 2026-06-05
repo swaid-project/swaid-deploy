@@ -1,17 +1,18 @@
 #!/bin/bash
 
-# Define paths to the built executables
-CORE_EXE="./plate-resonance/build/resonance_core/resonance_core"
-UI_EXE="./human-interface/dist/SWAID_Interface/SWAID_Interface"
+# Define absolute or safe relative paths
+ROOT_DIR="$(pwd)"
+CORE_EXE="$ROOT_DIR/plate-resonance/build/resonance_core/resonance_core"
+UI_EXE="$ROOT_DIR/human-interface/dist/SWAID_Interface/SWAID_Interface"
 
 # 1. Verification
 if [ ! -f "$CORE_EXE" ]; then
-    echo "ERROR: C++ Core not found. Did you run 'make core'?"
+    echo "ERROR: C++ Core not found at $CORE_EXE. Did you run 'make core'?"
     exit 1
 fi
 
 if [ ! -f "$UI_EXE" ]; then
-    echo "ERROR: UI Executable not found. Did you run 'make ui'?"
+    echo "ERROR: UI Executable not found at $UI_EXE. Did you run 'make ui'?"
     exit 1
 fi
 
@@ -24,16 +25,19 @@ trap 'echo "\n[Launcher] Shutting down system..."; kill $CORE_PID $UI_PID 2>/dev
 
 # 3. Launch the C++ Core in the background
 echo "[Launcher] Starting Plate Resonance Server..."
-cd plate-resonance/resonance_core && ../build/resonance_core/resonance_core &
+# The Core relies on relative paths (e.g. "../master_symbols.json") 
+# Assuming it was built to run from plate-resonance/
+cd "$ROOT_DIR/plate-resonance"
+"$CORE_EXE" &
 CORE_PID=$!
-cd ../..
+cd "$ROOT_DIR"
 
 # Wait 2 seconds to allow the C++ Server to bind the ZeroMQ port and initialize PortAudio
 sleep 2
 
 # 4. Launch the Python UI in the background
 echo "[Launcher] Starting Human Interface Client..."
-$UI_EXE &
+"$UI_EXE" &
 UI_PID=$!
 
 # 5. Wait for both processes. If either crashes or closes, the script moves on.
