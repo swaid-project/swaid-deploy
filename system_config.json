@@ -2,7 +2,7 @@
     "audio_routing": {
         "sample_rate": 48000,
         "transducer_device_name": "ICUSBAUDIO7D",
-        "music_device_name": "LG TV",
+        "music_device_name": "ICUSBAUDIO7D",
         "music_channels": [1, 2],
         "transducer_channels": {
             "logical_1": 5,
