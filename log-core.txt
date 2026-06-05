@@ -1,0 +1,143 @@
+swaid@swaid:~/Documents/swaid-deploy/plate-resonance$ gdb ./build/resonance_core/resonance_core 
+GNU gdb (Debian 16.3-1) 16.3
+Copyright (C) 2024 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Type "show copying" and "show warranty" for details.
+This GDB was configured as "x86_64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<https://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+Reading symbols from ./build/resonance_core/resonance_core...
+(No debugging symbols found in ./build/resonance_core/resonance_core)
+(gdb) run
+Starting program: /home/swaid/Documents/swaid-deploy/plate-resonance/build/resonance_core/resonance_core 
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[Config] system_config.json loaded successfully.
+[New Thread 0x7ffff75a96c0 (LWP 19853)]
+[Hardware Worker] Thread started.
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[New Thread 0x7ffff6da86c0 (LWP 19854)]
+[Main] Services started. Entering Audio Watchdog loop.
+[LED SAL] Successfully opened /dev/ttyACM0
+[Watchdog] Audio failure detected or initial boot. Rebuilding context...
+[LED SAL] Connected to Pico (fd=3)
+Found JSON Array with 12 elements.
+pd 0.56.3
+bonk version 1.5
+fiddle version 1.1 TEST4
+pd~ version 0.54
+pique 0.1 for PD version 23
+[libpd] Initialized. Block size: 64
+file1.pd 0 0 153 0 (loadbang->loadbang) connection failed
+cannot connect to non-existing object
+file1.pd 103 0 157 0 (*~->???) connection failed
+cannot connect to non-existing object
+file1.pd 104 0 157 1 (+->???) connection failed
+error: audio signal outlet connected to nonsignal inlet (ignored)
+error: audio signal outlet connected to nonsignal inlet (ignored)
+[LED SAL] Attempting to open port: /dev/ttyACM0 ...
+[LED SAL] Successfully opened /dev/ttyACM0
+[LED SAL] Connected to Pico (fd=8)
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+GropeDevice: alsa_snd_pcm_hw_params_set_rate_near failed! got 44100
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.hdmi.0:CARD=0,AES0=4,AES1=130,AES2=0,AES3=2'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline:CARD=0,DEV=0
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+ALSA lib confmisc.c:1377:(snd_func_refer) Unable to find definition 'cards.0.pcm.modem.0:CARD=0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM phoneline
+LED Driver connected successfully.
+[New Thread 0x7ffff4f616c0 (LWP 19855)]
+[New Thread 0x7fffeffff6c0 (LWP 19856)]
+ZeroMQ Server ready - listening on ipc:///tmp/swaid.sock (REQ/REP)
+[New Thread 0x7ffff47606c0 (LWP 19857)]
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+[Thread 0x7ffff47606c0 (LWP 19857) exited]
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[New Thread 0x7ffff47606c0 (LWP 19858)]
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Thread 0x7ffff47606c0 (LWP 19858) exited]
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+ALSA lib pcm_oss.c:404:(_snd_pcm_oss_open) Cannot open device /dev/dsp
+[New Thread 0x7fffef7fe6c0 (LWP 19859)]
+[Thread 0x7fffef7fe6c0 (LWP 19859) exited]
+[New Thread 0x7fffef7fe6c0 (LWP 19860)]
+[Thread 0x7fffef7fe6c0 (LWP 19860) exited]
+[New Thread 0x7fffef7fe6c0 (LWP 19862)]
+[Thread 0x7fffef7fe6c0 (LWP 19862) exited]
+[New Thread 0x7fffef7fe6c0 (LWP 19863)]
+[Thread 0x7fffef7fe6c0 (LWP 19863) exited]
+ALSA lib pcm_a52.c:1036:(_snd_pcm_a52_open) a52 is only for playback
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+ALSA lib confmisc.c:160:(snd_config_get_card) Invalid field card
+ALSA lib pcm_usb_stream.c:481:(_snd_pcm_usb_stream_open) Invalid card 'card'
+[New Thread 0x7fffef7fe6c0 (LWP 19871)]
+[Thread 0x7fffef7fe6c0 (LWP 19871) exited]
+[New Thread 0x7fffef7fe6c0 (LWP 19872)]
+[Thread 0x7fffef7fe6c0 (LWP 19872) exited]
+[New Thread 0x7ffff47606c0 (LWP 19873)]
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
+[Thread 0x7ffff47606c0 (LWP 19873) exited]
+[Audio] Found device: ICUSBAUDIO7D: USB Audio (hw:0,0) (Index: 0 | Out: 8)
+[New Thread 0x7fffef7fe6c0 (LWP 19874)]
+[Watchdog] Audio restored successfully.
+
+Thread 15 "resonance_core" received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7fffef7fe6c0 (LWP 19874)]
+0x000055555559976d in libpd_process_float ()
+(gdb) bt
+#0  0x000055555559976d in libpd_process_float ()
+#1  0x0000555555593b80 in mixMusic(float*, unsigned long, int) ()
+#2  0x0000555555593cea in audioCallback(void const*, void*, unsigned long, PaStreamCallbackTimeInfo const*, unsigned long, void*) ()
+#3  0x00007ffff7f9b54d in NonAdaptingProcess ()
+   from /home/swaid/Documents/swaid-deploy/plate-resonance/build/_deps/portaudio-build/libportaudio.so.2
+#4  0x00007ffff7f9d166 in PaUtil_EndBufferProcessing ()
+   from /home/swaid/Documents/swaid-deploy/plate-resonance/build/_deps/portaudio-build/libportaudio.so.2
+#5  0x00007ffff7fa8282 in CallbackThreadFunc ()
+   from /home/swaid/Documents/swaid-deploy/plate-resonance/build/_deps/portaudio-build/libportaudio.so.2
+#6  0x00007ffff7978b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#7  0x00007ffff79f67f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+(gdb) Get:7 http://deb.debian.org/debian trixie/main amd64 gdb amd64 16.3-1 [3,992 kB]
+Get:7 http://deb.debian.org/debian trixie/main amd64 gdb amd64 16.3-1 [3,992 kB]
+
