@@ -22,7 +22,7 @@ def get_resource_path(relative_path):
 # --- Configuration & Constants (Updated to Latest Legacy Specs) ---
 MODEL_PATH = get_resource_path("models/hand_landmarker.task")
 
-CAMERA_WIDTH = 1980
+CAMERA_WIDTH = 1920
 CAMERA_HEIGHT = 1020
 CAMERA_FPS = 20
 
@@ -47,17 +47,35 @@ def frame_to_qimage(frame):
     return QImage(rgb_frame.data, w, h, w * c, QImage.Format_RGB888).copy()
 
 def open_camera(source):
-    candidates = [source]
+    seen: set = set()
+    candidates = []
+
+    def _add(c):
+        k = str(c)
+        if k not in seen:
+            seen.add(k)
+            candidates.append(c)
+
+    _add(source)
     if isinstance(source, str) and source.startswith("/dev/video"):
-        try: candidates.append(int(Path(source).name.replace("video", "")))
-        except ValueError: pass
+        try:
+            _add(int(Path(source).name.replace("video", "")))
+        except ValueError:
+            pass
+
+    # Scan all available video devices so any USB webcam is found regardless of index
+    for dev in sorted(Path("/dev").glob("video*"), key=lambda p: int(p.name[5:] or 0)):
+        _add(str(dev))
+
     for c in candidates:
-        cap = cv2.VideoCapture(c, cv2.CAP_V4L2)
-        if cap.isOpened(): return cap
-        cap.release()
-        cap = cv2.VideoCapture(c)
-        if cap.isOpened(): return cap
-        cap.release()
+        for backend in (cv2.CAP_V4L2, cv2.CAP_ANY):
+            cap = cv2.VideoCapture(c, backend)
+            if cap.isOpened():
+                ok, _ = cap.read()
+                if ok:
+                    return cap
+            cap.release()
+
     return cv2.VideoCapture()
 
 def letterbox_for_detection(frame):
@@ -106,6 +124,7 @@ class HandTrackingThread(QThread):
     hands_detected = Signal(object, object, bool, object, float)
     camera_frame_ready = Signal(object)
     metrics_updated = Signal(dict)
+    camera_error = Signal(str)
 
     def __init__(self, camera_index=0):
         super().__init__()
@@ -133,7 +152,9 @@ class HandTrackingThread(QThread):
 
     def run(self):
         cap = open_camera(self.camera_index)
-        if not cap.isOpened(): return
+        if not cap.isOpened():
+            self.camera_error.emit(f"Camera {self.camera_index} could not be opened")
+            return
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
@@ -155,11 +176,18 @@ class HandTrackingThread(QThread):
         mapping = {"offset_x": 0, "offset_y": 0, "width": 1280, "height": 920}
 
         with HandLandmarker.create_from_options(options) as landmarker:
+            _consecutive_failures = 0
             while self.running:
                 start = time.monotonic()
                 success, frame = cap.read()
                 if not success:
-                    time.sleep(0.01); continue
+                    _consecutive_failures += 1
+                    if _consecutive_failures >= 30:
+                        self.camera_error.emit(f"Camera {self.camera_index} stopped responding")
+                        break
+                    time.sleep(0.01)
+                    continue
+                _consecutive_failures = 0
 
                 self._cam_times.append(start)
                 frame = cv2.flip(frame, 1)

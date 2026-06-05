@@ -109,6 +109,8 @@ class MainWindow(QWidget):
         self._dwell_armed = True
         self._last_note_change = 0.0
 
+        self._camera_error = ""
+
         self.selector_radius_scale = 0.39
         self.center_plate_radius_scale = 0.33
         
@@ -168,9 +170,14 @@ class MainWindow(QWidget):
         sw, sh = float(iw), iw / 1.0
         return QRectF(0, (ih - sh) / 2, sw, sh)
 
+    def set_camera_error(self, msg):
+        self._camera_error = msg
+
     def _sync_and_diagnostics_loop(self):
         if not self.client.is_connected:
             self.warning_banner.show_warning("CRITICAL: Plate Resonance Server Offline", critical=True)
+        elif self._camera_error:
+            self.warning_banner.show_warning(self._camera_error, critical=True)
         elif self.client.diagnostics.get("usb_audio") == 0:
             self.warning_banner.show_warning("WARNING: USB Soundcard Disconnected. Attempting recovery...", critical=False)
         elif self.client.diagnostics.get("pico_serial") == 0:
@@ -220,13 +227,13 @@ class MainWindow(QWidget):
             self._dwell_note_id = NOTE_MAP.get(labels[section % len(labels)], 0); return
         self.dwell_progress = min(1.0, (now - self.dwell_started_at) / self.dwell_duration)
         if self.dwell_progress >= 1.0:
-            if time.time() - self._last_note_change < 1.0: return
+            if time.monotonic() - self._last_note_change < 1.0: return
             self.selected_section = section; self._selected_note_id = self._dwell_note_id
             ch_id = self._id_for_note(self._dwell_note_id)
             if ch_id:
                 led = self.catalogue[ch_id].get("LED_effect", 0)
                 self.client.trigger(ch_id, self._dwell_note_id, led)
-                self._last_note_change = time.time(); self._record_interaction()
+                self._last_note_change = time.monotonic(); self._record_interaction()
             self.dwell_progress = 0.0; self._dwell_armed = False
 
     def _id_for_note(self, note_id):

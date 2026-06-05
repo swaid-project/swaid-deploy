@@ -7,17 +7,17 @@ import logging
 import uuid
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='[Python UI] %(levelname)s: %(message)s')
 logger = logging.getLogger("ResonanceClient")
-
-
-logger = logging.getLogger("ResonanceClient")
-logger.setLevel(logging.DEBUG) # Set to DEBUG to capture payload traffic
+logger.setLevel(logging.DEBUG)
+logger.propagate = False  # prevent double output via root logger
 
 file_handler = logging.FileHandler("client_ipc.log")
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(file_handler)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('[Python UI] %(levelname)s: %(message)s'))
+logger.addHandler(console_handler)
 
 class ResonanceClient:
     """

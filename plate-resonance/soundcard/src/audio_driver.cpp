@@ -97,18 +97,22 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
         }
     }
 
-    const int duration = 100;
-    std::thread([fromAmps, toAmps, duration, symbol_id]() {
-        const int steps  = 20;
-        int stepMs = duration / steps;
+    static std::atomic<unsigned long long> fadeGeneration{0};
+    unsigned long long myGen = ++fadeGeneration;
+    std::thread([fromAmps, toAmps, myGen]() {
+        const int steps = 20;
+        const int stepMs = 100 / steps;
         for (int s = 1; s <= steps; s++) {
+            if (fadeGeneration.load(std::memory_order_relaxed) != myGen) return;
             float t = (float)s / steps;
             for (int i = 0; i < NUM_GENERATORS; i++)
                 generators[i].amp.store(fromAmps[i] + t * (toAmps[i] - fromAmps[i]));
             std::this_thread::sleep_for(std::chrono::milliseconds(stepMs));
         }
-        for (int i = 0; i < NUM_GENERATORS; i++)
-            generators[i].amp.store(toAmps[i]);
+        if (fadeGeneration.load(std::memory_order_relaxed) == myGen) {
+            for (int i = 0; i < NUM_GENERATORS; i++)
+                generators[i].amp.store(toAmps[i]);
+        }
     }).detach();
 }
 
@@ -175,6 +179,8 @@ int audioCallback(const void *inputBuffer, void *outputBuffer,
     float *out = (float*)outputBuffer;
     for (unsigned int i = 0; i < framesPerBuffer * NUM_CHANNELS; i++) out[i] = 0.0f;
     if (masterMute.load()) return paContinue;
+    int pending = pendingLibpdNote.exchange(-2, std::memory_order_acq_rel);
+    if (pending != -2) libpd_float("from_core", (float)pending);
     mixMusic(out, framesPerBuffer, NUM_CHANNELS);
     generateSineWaves(out, framesPerBuffer, NUM_CHANNELS);
     return paContinue;
@@ -190,6 +196,8 @@ int musicCallback(const void *inputBuffer, void *outputBuffer,
     int channels = 2; 
     for (unsigned int i = 0; i < framesPerBuffer * channels; i++) out[i] = 0.0f;
     if (masterMute.load() || musicMute.load() || !pd_patch_loaded.load()) return paContinue;
+    int pending = pendingLibpdNote.exchange(-2, std::memory_order_acq_rel);
+    if (pending != -2) libpd_float("from_core", (float)pending);
     std::vector<float> pdOut(framesPerBuffer * 2);
     int ticks = framesPerBuffer / libpd_blocksize();
     libpd_process_float(ticks, nullptr, pdOut.data());

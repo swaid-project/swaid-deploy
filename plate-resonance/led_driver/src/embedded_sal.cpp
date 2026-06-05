@@ -17,7 +17,7 @@
 
 EmbeddedSAL::EmbeddedSAL()
     : fd_(-1)
-    , current_effect_(0)
+    , current_effect_(-1)
 {}
 
 EmbeddedSAL::~EmbeddedSAL() {

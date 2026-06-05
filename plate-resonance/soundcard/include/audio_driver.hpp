@@ -66,6 +66,9 @@ extern std::atomic<int> diag_usb_audio;
 extern std::atomic<int> diag_hdmi_audio;
 extern std::atomic<bool> pd_patch_loaded; // Global safeguard for PD status
 
+// Cross-thread libpd note dispatch: ZMQ thread stores, audio callback consumes
+extern std::atomic<int> pendingLibpdNote;
+
 // --- Constants 
 extern const double PI;
 extern int SAMPLE_RATE;

@@ -36,9 +36,12 @@ void pd_float_hook(const char *source, float value) {
 }
 
 void hardwareWorkerThread() {
+    std::optional<int> pendingRetry;
     std::cout << "[Hardware Worker] Thread started.\n";
     while (hardwareWorkerRunning.load()) {
-        auto effectId = ledQueue.pop();
+        auto effectId = pendingRetry.has_value() ? pendingRetry : ledQueue.pop();
+        pendingRetry = std::nullopt;
+
         if (effectId.has_value()) {
             if (ledDriver.isConnected()) {
                 if (!ledDriver.sendEffect(effectId.value())) {
@@ -56,7 +59,7 @@ void hardwareWorkerThread() {
                     ledDriver.sendEffect(effectId.value());
                 } else {
                     std::this_thread::sleep_for(std::chrono::seconds(2));
-                    ledQueue.push(effectId.value());
+                    pendingRetry = effectId;
                 }
             }
         } else {
@@ -151,15 +154,6 @@ void jsonListenerThread() {
         libpd_finish_message("pd", "dsp");
     }
 
-    // Try to connect to LEDs
-    if (ledDriver.connect()) {
-        std::cout << "LED Driver connected successfully.\n";
-        diag_pico_serial.store(1);
-    } else {
-        std::cerr << "LED Driver connection failed (Pico not found).\n";
-        diag_pico_serial.store(0);
-    }
- 
     zmq::context_t context(1);
 	zmq::socket_t rep_socket(context, zmq::socket_type::rep);
 	rep_socket.set(zmq::sockopt::rcvhwm, 100);
@@ -184,19 +178,26 @@ void jsonListenerThread() {
 
     lastHeartbeat.store(std::chrono::system_clock::now().time_since_epoch().count() / 1000000000);
 
+    // Don't arm the failsafe until the first ping arrives — audio init may take longer
+    // than 3 s on cold boot when the soundcard is still being discovered.
+    bool heartbeatReceived = false;
+    bool muteFromFailsafe   = false;
+
 	while (jsonLive.load()) {
 		zmq::message_t msg;
 		auto result = rep_socket.recv(msg, zmq::recv_flags::none);
-		
+
         long long now = std::chrono::system_clock::now().time_since_epoch().count() / 1000000000;
-        if (now - lastHeartbeat.load() > 3) {
+        if (heartbeatReceived && now - lastHeartbeat.load() > 3) {
             if (!masterMute.load()) {
                 std::cerr << "!!! FAILSAFE TRIGGERED: No heartbeat for 3s. Muting. !!!\n";
                 masterMute.store(true);
+                muteFromFailsafe = true;
             }
         }
 
         if (!result) continue;
+        lastHeartbeat.store(now);
 
 		std::string payload(static_cast<char*>(msg.data()), msg.size());
         
@@ -218,6 +219,13 @@ void jsonListenerThread() {
 
         if (type == "ping") {
             lastHeartbeat.store(now);
+            heartbeatReceived = true;
+            // Auto-recover from failsafe mute when the UI reconnects
+            if (muteFromFailsafe && masterMute.load()) {
+                masterMute.store(false);
+                muteFromFailsafe = false;
+                std::cout << "[Failsafe] Heartbeat restored. Unmuting.\n";
+            }
             std::string reply_str = build_full_reply("pong").dump();
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
             continue;
@@ -236,8 +244,8 @@ void jsonListenerThread() {
             std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect 
                       << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
 
-            // 1. Seed PureData
-            libpd_float("from_core", (float)music_note);
+            // 1. Seed PureData (consumed by audio callback on next block)
+            pendingLibpdNote.store(music_note, std::memory_order_release);
 
             // 2. Immediate Hardware Dispatch
             ledQueue.push(led_effect);
@@ -279,7 +287,7 @@ void jsonListenerThread() {
             if (message["command"].contains("music_mute")) {
                 bool mute = message["command"]["music_mute"].get<bool>();
                 musicMute.store(mute);
-                if (mute) libpd_float("from_core", -1.0f);
+                if (mute) pendingLibpdNote.store(-1, std::memory_order_release);
             }
             std::string reply_str = build_full_reply("ok").dump();
             std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";

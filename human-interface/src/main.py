@@ -49,7 +49,8 @@ def main():
         "center_camera": FALLBACK_CAMERA_CHOICES[0],
         "tracker": None,
         "settings_dialog": None,
-        "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0}
+        "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0},
+        "camera_fallback_tried": False,
     }
 
     def on_hands_detected(left, right, closed, cursor_norm, frame_time):
@@ -71,15 +72,36 @@ def main():
         state["perf"].update(metrics)
         overlay.update_stats(state["perf"])
 
-    def start_tracker(camera_index):
+    def on_camera_error(failed_index, msg):
+        print(f"[Main] Camera {failed_index} error: {msg}")
+        # Discover all video devices at runtime so a USB webcam at any index is found
+        discovered = sorted(
+            Path("/dev").glob("video*"),
+            key=lambda p: int(p.name[5:] or 0)
+        )
+        all_sources = [str(d) for d in discovered] if discovered else [0, 1, 2, 3]
+        remaining = [s for s in all_sources if s != str(failed_index) and s != failed_index]
+        if remaining and not state["camera_fallback_tried"]:
+            state["camera_fallback_tried"] = True
+            print(f"[Main] Auto-switching to fallback camera {remaining[0]}")
+            start_tracker(remaining[0], _from_fallback=True)
+        else:
+            state["camera_fallback_tried"] = False
+            window.set_camera_error("CAMERA OFFLINE — Hand tracking unavailable")
+
+    def start_tracker(camera_index, _from_fallback=False):
+        if not _from_fallback:
+            state["camera_fallback_tried"] = False
         if state["tracker"]:
             state["tracker"].stop()
             state["tracker"].wait(1000)
-        
+
+        window.set_camera_error("")
         tracker = HandTrackingThread(camera_index)
         tracker.hands_detected.connect(on_hands_detected)
         tracker.camera_frame_ready.connect(window.set_center_live_image)
         tracker.metrics_updated.connect(on_metrics_updated)
+        tracker.camera_error.connect(lambda msg: on_camera_error(camera_index, msg))
         tracker.start()
         state["tracker"] = tracker
         state["tracking_camera"] = camera_index

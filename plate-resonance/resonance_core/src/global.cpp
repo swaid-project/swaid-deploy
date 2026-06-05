@@ -27,6 +27,9 @@ std::atomic<int> diag_pico_serial{0};
 std::atomic<int> diag_usb_audio{0};
 std::atomic<int> diag_hdmi_audio{0};
 
+// -2 = no pending note; written by ZMQ thread, consumed by audio callback
+std::atomic<int> pendingLibpdNote{-2};
+
 const int NUM_CHANNELS    = 8; 
 const int NUM_GENERATORS  = 8; 
 
