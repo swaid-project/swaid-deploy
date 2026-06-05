@@ -45,7 +45,7 @@ bool loadSystemConfig(const std::string& path) {
     }
 }
 
-int findAudioDeviceByName(const std::string& nameSubstr) {
+int findAudioDeviceByName(const std::string& nameSubstr, int minChannels) {
     int numDevices = Pa_GetDeviceCount();
     if (numDevices < 0) {
         std::cerr << "[Audio] PortAudio error: " << Pa_GetErrorText(numDevices) << "\n";
@@ -57,8 +57,8 @@ int findAudioDeviceByName(const std::string& nameSubstr) {
         if (!info) continue;
         
         std::string deviceName = info->name;
-        if (deviceName.find(nameSubstr) != std::string::npos) {
-            std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << ")\n";
+        if (deviceName.find(nameSubstr) != std::string::npos && info->maxOutputChannels >= minChannels) {
+            std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << " | Out: " << info->maxOutputChannels << ")\n";
             return i;
         }
     }

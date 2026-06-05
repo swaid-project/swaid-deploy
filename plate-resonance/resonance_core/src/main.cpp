@@ -70,8 +70,8 @@ int main() {
 }
 
 bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream) {
-    int t_idx = findAudioDeviceByName(systemConfig.routing.transducer_device_name);
-    int m_idx = findAudioDeviceByName(systemConfig.routing.music_device_name);
+    int t_idx = findAudioDeviceByName(systemConfig.routing.transducer_device_name, NUM_CHANNELS);
+    int m_idx = findAudioDeviceByName(systemConfig.routing.music_device_name, 2);
 
     if (t_idx == -1 || m_idx == -1) return false;
 
@@ -86,11 +86,19 @@ bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream) {
     t_params.hostApiSpecificStreamInfo = nullptr;
 
     if (t_idx == m_idx) {
-        Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, audioCallback, nullptr);
+        PaError err = Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, audioCallback, nullptr);
+        if (err != paNoError) {
+            std::cerr << "[Audio] Failed to open Combined stream: " << Pa_GetErrorText(err) << "\n";
+            return false;
+        }
         Pa_StartStream(*t_stream);
         *m_stream = nullptr; 
     } else {
-        Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, transducerCallback, nullptr);
+        PaError err_t = Pa_OpenStream(t_stream, nullptr, &t_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, transducerCallback, nullptr);
+        if (err_t != paNoError) {
+            std::cerr << "[Audio] Failed to open Transducer stream (Dev " << t_idx << "): " << Pa_GetErrorText(err_t) << "\n";
+            return false;
+        }
         
         PaStreamParameters m_params;
         m_params.device = m_idx;
@@ -99,7 +107,12 @@ bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream) {
         m_params.suggestedLatency = Pa_GetDeviceInfo(m_idx)->defaultLowOutputLatency;
         m_params.hostApiSpecificStreamInfo = nullptr;
 
-        Pa_OpenStream(m_stream, nullptr, &m_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, musicCallback, nullptr);
+        PaError err_m = Pa_OpenStream(m_stream, nullptr, &m_params, SAMPLE_RATE, FRAMES_PER_BUFFER, paNoFlag, musicCallback, nullptr);
+        if (err_m != paNoError) {
+            std::cerr << "[Audio] Failed to open Music stream (Dev " << m_idx << "): " << Pa_GetErrorText(err_m) << "\n";
+            if (*t_stream) { Pa_CloseStream(*t_stream); *t_stream = nullptr; }
+            return false;
+        }
         
         Pa_StartStream(*t_stream);
         Pa_StartStream(*m_stream);

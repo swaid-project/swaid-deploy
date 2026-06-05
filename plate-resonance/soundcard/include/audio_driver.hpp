@@ -74,7 +74,7 @@ extern const int FRAMES_PER_BUFFER;
 bool loadSystemConfig(const std::string& path);
 
 // --- Audio Device Discovery
-int findAudioDeviceByName(const std::string& nameSubstr);
+int findAudioDeviceByName(const std::string& nameSubstr, int minChannels = 2);
 
 // --- Sending the pattern to the soundcard generators
 // Updated: Removed fade_transition string to hardcode 100ms
