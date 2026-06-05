@@ -17,14 +17,13 @@ from mediapipe.tasks.python.vision.core.vision_task_running_mode import (
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / relative_path
-    # For development, src/vision/hand_tracking.py -> root is 3 levels up
     return Path(__file__).parent.parent.parent / relative_path
 
-# --- Configuration & Constants ---
+# --- Configuration & Constants (Updated to Latest Legacy Specs) ---
 MODEL_PATH = get_resource_path("models/hand_landmarker.task")
 
-CAMERA_WIDTH = 1280
-CAMERA_HEIGHT = 1920 
+CAMERA_WIDTH = 1980
+CAMERA_HEIGHT = 1020
 CAMERA_FPS = 20
 
 DETECTION_WIDTH = 1280
@@ -41,8 +40,6 @@ LEFT_HAND_CLOSE_HOLD_SECONDS = 0.45
 
 LIVE_FOOTAGE_FPS = 20
 FALLBACK_CAMERA_CHOICES = [0, 1]
-
-# --- Helper Functions ---
 
 def frame_to_qimage(frame):
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -73,17 +70,18 @@ def letterbox_for_detection(frame):
     det_frame[oy:oy+rh, ox:ox+rw] = resized
     return det_frame, {"offset_x": ox, "offset_y": oy, "width": rw, "height": rh}
 
+_CLAHE = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
+
 def preprocess_for_hand_detection(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     mean_l = float(gray.mean())
     if mean_l > 155: a, b = 0.92, -16
     elif mean_l < 85: a, b = 1.10, 16
     else: a, b = 1.0, 0
-    balanced = cv2.convertScaleAbs(image, alpha=a, beta=b)
+    balanced = cv2.convertScaleAbs(image, alpha=a, beta=b) if (a != 1.0 or b != 0) else image
     lab = cv2.cvtColor(balanced, cv2.COLOR_BGR2LAB)
     l, aa, bb = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
-    l = clahe.apply(l)
+    l = _CLAHE.apply(l)
     return cv2.cvtColor(cv2.merge((l, aa, bb)), cv2.COLOR_LAB2BGR)
 
 def normalized_landmark_points(landmarks, mapping):
@@ -146,9 +144,9 @@ class HandTrackingThread(QThread):
             base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
             running_mode=VisionTaskRunningMode.LIVE_STREAM,
             num_hands=2,
-            min_hand_detection_confidence=0.25,
-            min_hand_presence_confidence=0.25,
-            min_tracking_confidence=0.25,
+            min_hand_detection_confidence=0.30,
+            min_hand_presence_confidence=0.30,
+            min_tracking_confidence=0.30,
             result_callback=self._on_res
         )
 
@@ -169,7 +167,7 @@ class HandTrackingThread(QThread):
                 
                 # Emit live feed
                 now = time.monotonic()
-                if now - self._live_times[-1] if self._live_times else 0 >= 1.0 / LIVE_FOOTAGE_FPS:
+                if now - (self._live_times[-1] if self._live_times else 0) >= 1.0 / LIVE_FOOTAGE_FPS:
                     self._live_times.append(now)
                     self.camera_frame_ready.emit(frame_to_qimage(frame))
 
@@ -196,36 +194,26 @@ class HandTrackingThread(QThread):
                     self.smoothed_l, self.smoothed_r = left, right
                     self.last_l_at = self.last_r_at = time.monotonic()
                 elif prev_gray is not None and (self.smoothed_l or self.smoothed_r):
-                    # Optical Flow with robust checks
                     if (time.monotonic() - max(self.last_l_at, self.last_r_at)) * 1000 <= OPTICAL_FLOW_HOLD_MS:
                         h, w = frame.shape[:2]
                         for i, (pts, lat) in enumerate([(self.smoothed_l, self.last_l_at), (self.smoothed_r, self.last_r_at)]):
-                            # Strict validation to prevent OpenCV Assertion Failed (lkpyramid.cpp:1281)
                             if not isinstance(pts, list) or len(pts) != 21: continue
-                            
                             try:
                                 pts_px = (np.array(pts, dtype=np.float32) * [w, h]).reshape(-1, 1, 2)
-                                # Explicitly cast and ensure contiguous memory for OpenCV C++ bindings
                                 pts_px = np.ascontiguousarray(pts_px, dtype=np.float32)
-                                
                                 next_px, status, _ = cv2.calcOpticalFlowPyrLK(prev_gray, gray, pts_px, None, winSize=(31,31))
                                 if next_px is not None and status is not None and status.sum() >= 12:
                                     updated = (next_px.reshape(-1, 2) / [w, h]).tolist()
                                     if i == 0: self.smoothed_l = updated
                                     else: self.smoothed_r = updated
                                 else:
-                                    # Flow lost tracking, clear the hand
                                     if i == 0: self.smoothed_l = None
                                     else: self.smoothed_r = None
-                            except Exception as e:
-                                print(f"[Vision] Optical Flow Exception caught: {e}")
+                            except Exception:
                                 if i == 0: self.smoothed_l = None
                                 else: self.smoothed_r = None
                     else:
-                        # Hold time expired, clear hands
-                        self.smoothed_l = None
-                        self.smoothed_r = None
-
+                        self.smoothed_l = self.smoothed_r = None
 
                 prev_gray = gray
                 self._track_times.append(time.monotonic())

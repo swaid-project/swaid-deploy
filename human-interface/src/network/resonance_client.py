@@ -89,8 +89,8 @@ class ResonanceClient:
                 self.is_connected = False
                 time.sleep(1.0) # Back off on major errors
 
-            # Maintain ~20Hz loop (50ms)
-            time.sleep(0.05)
+            # Maintain ~2Hz loop (500ms) - Lowered from 20Hz as per Disabling Continuous Sync spec
+            time.sleep(0.5)
 
         socket.close()
 

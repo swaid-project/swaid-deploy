@@ -15,11 +15,9 @@ from ui.dashboard import TestingOverlay
 from ui.settings import CameraSettingsDialog
 
 def get_resource_path(relative_path):
-    try:
-        base_path = Path(sys._MEIPASS)
-    except Exception:
-        base_path = Path(__file__).parent.parent
-    return base_path / relative_path
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS) / relative_path
+    return Path(__file__).parent.parent / relative_path
 
 def load_catalogue():
     path = get_resource_path("master_symbols.json")
@@ -47,15 +45,15 @@ def main():
     
     state = {
         "tracking_camera": FALLBACK_CAMERA_CHOICES[0],
+        "center_mode": "live",
         "center_camera": FALLBACK_CAMERA_CHOICES[0],
         "tracker": None,
+        "settings_dialog": None,
         "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0}
     }
 
     def on_hands_detected(left, right, closed, cursor_norm, frame_time):
         w, h = window.width(), window.height()
-        
-        # Scale to pixel space (Crucial for UI rendering)
         left_px = scale_points(left, w, h)
         right_px = scale_points(right, w, h)
         cursor_px = QPointF(cursor_norm[0] * w, cursor_norm[1] * h) if cursor_norm else None
@@ -87,12 +85,32 @@ def main():
         state["tracking_camera"] = camera_index
 
     def open_settings():
-        dialog = CameraSettingsDialog(state["tracking_camera"], state["center_camera"], window)
-        if dialog.exec() == QDialog.Accepted:
-            vals = dialog.values()
+        if state["settings_dialog"] and state["settings_dialog"].isVisible():
+            state["settings_dialog"].close()
+            return
+
+        def on_accepted():
+            vals = dlg.values()
             if vals["tracking_camera"] != state["tracking_camera"]:
                 start_tracker(vals["tracking_camera"])
             state["center_camera"] = vals["center_camera"]
+            state["center_mode"] = vals["center_mode"]
+
+        dlg = CameraSettingsDialog(
+            state["tracking_camera"], state["center_mode"], state["center_camera"],
+            standby_callback=window.trigger_standby_test,
+            diag_callback=lambda: window.testing_toggle.emit(),
+            diag_active=overlay.isVisible(),
+            hb_callback=lambda enabled: setattr(window, "_heartbeat_enabled", enabled),
+            hb_active=getattr(window, "_heartbeat_enabled", True),
+            hints_callback=lambda: setattr(window, "_hints_visible", not getattr(window, "_hints_visible", True)) or window.update(),
+            hints_active=getattr(window, "_hints_visible", True),
+            parent=window
+        )
+        dlg.accepted.connect(on_accepted)
+        dlg.finished.connect(lambda _: state.update({"settings_dialog": None}))
+        state["settings_dialog"] = dlg
+        dlg.show()
 
     window.settings_requested.connect(open_settings)
     window.testing_toggle.connect(lambda: overlay.setVisible(not overlay.isVisible()))

@@ -6,6 +6,10 @@
 // libpd
 #include "z_libpd.h"
 
+// Set to 1 to enable continuous hardware sync with PureData notes
+// Set to 0 to only sync on the initial ZMQ trigger
+#define CONTINUOUS_SYNC_ENABLED 0
+
 // Global LED Driver instance
 EmbeddedSAL ledDriver;
 
@@ -30,6 +34,7 @@ static std::string current_active_chladni = "NONE";
  * NEVER perform blocking I/O here.
  */
 void pd_float_hook(const char *source, float value) {
+#if CONTINUOUS_SYNC_ENABLED
     if (source && strcmp(source, "to_core") == 0) {
         int note = static_cast<int>(value);
         
@@ -73,6 +78,7 @@ void pd_float_hook(const char *source, float value) {
             ledQueue.push(note % 20); 
         }
     }
+#endif
 }
 
 void hardwareWorkerThread() {
@@ -279,8 +285,22 @@ void jsonListenerThread() {
                       << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
 
             libpd_float("from_core", (float)music_note);
+
+#if !CONTINUOUS_SYNC_ENABLED
+            // Direct Hardware Dispatch (Restored)
             ledQueue.push(led_effect);
             applyPattern(catalogue, chladni_id, vol_l, vol_r);
+
+            // Freeze the active state to the triggered values
+            current_playing_note = music_note;
+            current_active_chladni = chladni_id;
+#else
+            // In Continuous mode, we only trigger the music; 
+            // the pd_float_hook will catch the feedback and update hardware.
+            ledQueue.push(led_effect); 
+            // Note: applyPattern not strictly needed if pd_float_hook is active, 
+            // but we keep ledQueue here for immediate LED reaction.
+#endif
 
             std::string reply_str = build_full_reply("ok").dump();
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);

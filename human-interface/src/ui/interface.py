@@ -9,7 +9,7 @@ from PIL import Image
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (QColor, QFont, QImage, QPainter, QPainterPath,
-                          QPen, QPixmap, QRadialGradient)
+                          QPen, QPixmap, QRadialGradient, QPolygonF)
 from PySide6.QtWidgets import QWidget
 
 from ui.dashboard import WarningBanner
@@ -26,11 +26,24 @@ NOTE_MAP = {
 }
 IDLE_TIMEOUT_S = 5 * 60
 CYCLE_INTERVAL_S = 60
-TOTAL_NOTES = 12
+_STANDBY_TIMEOUT_S = 5 * 60
+_TOTAL_NOTES = 12
+
+_WAVE_STEP_BG = 3
+_WAVE_STEP_CIRCLE = 3
+
+_GHOST_HAND_PTS = (
+    ( 0.00,  0.00), (-0.30, -0.20), (-0.50, -0.38), (-0.63, -0.52), (-0.70, -0.63),
+    (-0.12, -0.52), (-0.14, -0.70), (-0.15, -0.83), (-0.15, -0.93), ( 0.00, -0.56),
+    ( 0.00, -0.76), ( 0.00, -0.90), ( 0.00, -1.00), ( 0.13, -0.52), ( 0.15, -0.70),
+    ( 0.15, -0.83), ( 0.15, -0.93), ( 0.26, -0.43), ( 0.28, -0.58), ( 0.28, -0.68),
+    ( 0.28, -0.76),
+)
 
 class MainWindow(QWidget):
     settings_requested = Signal()
     testing_toggle = Signal()
+    heartbeat_toggled = Signal(bool)
 
     def __init__(self, client, catalogue):
         super().__init__()
@@ -46,15 +59,15 @@ class MainWindow(QWidget):
         self._init_animation_state()
         self._init_ui_components()
         
-        # 1. Primary Animation Timer (60FPS)
+        # 1. Primary Animation Timer (33ms ~30FPS as per legacy)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
-        self.timer.start(16)
+        self.timer.start(33)
 
-        # 2. Sync & Diagnostics Timer (10Hz)
+        # 2. Sync & Diagnostics Timer (2Hz)
         self.sync_timer = QTimer(self)
         self.sync_timer.timeout.connect(self._sync_and_diagnostics_loop)
-        self.sync_timer.start(100)
+        self.sync_timer.start(500)
 
         self._symbol_images = {}
         self._preload_images()
@@ -63,12 +76,17 @@ class MainWindow(QWidget):
         # State tracking
         self._rendered_chladni_id = "NONE"
         self._last_interaction = time.monotonic()
+        self._last_hand_at = time.monotonic()
         self._idle_active = False
         self._idle_note = 0
+        self._standby_active = False
+        self._hints_visible = True
+        self._heartbeat_enabled = True
 
     def _init_animation_state(self):
         self.t = 0.0
-        self.frequency = 200.0
+        self._anim_last_time = 0.0
+        self.frequency = 2.7
         self.wave_amplitude = 0.0
         self.selected_section = 0
         self.hover_section = -1
@@ -108,6 +126,7 @@ class MainWindow(QWidget):
 
         self.image_btn_hover = False
         self.image_btn_rect = QRectF()
+        self._chladni_cache = {}
 
     def _init_ui_components(self):
         self.warning_banner = WarningBanner(self)
@@ -118,7 +137,6 @@ class MainWindow(QWidget):
         for name, entry in self.catalogue.items():
             rel_path = entry.get("ui_metadata", {}).get("image_path", "")
             if not rel_path: continue
-            
             img_path = get_resource_path(rel_path.lstrip("./"))
             if img_path.exists():
                 try:
@@ -168,14 +186,24 @@ class MainWindow(QWidget):
                 self._selected_note_id = pattern.get("music_note", 0)
 
     def update_animation(self):
-        self.t += 0.05
-        self.wave_amplitude = 0.50 + 0.45 * abs(math.sin(self.t * 0.9))
+        now = time.monotonic()
+        if self._anim_last_time == 0.0: self._anim_last_time = now
+        dt = min(now - self._anim_last_time, 0.05)
+        self._anim_last_time = now
+        self.t += dt * 3.0
+        
         channels = self._get_active_channels()
         if channels: self.frequency = sum(ch["frequency_hz"] for ch in channels) / len(channels)
         else: self.frequency = 200.0
 
-        if not self._idle_active and (time.monotonic() - self._last_interaction >= IDLE_TIMEOUT_S):
+        self.wave_amplitude = 0.50 + 0.45 * abs(math.sin(self.t * 0.9))
+
+        if not self._idle_active and (now - self._last_interaction >= IDLE_TIMEOUT_S):
             self._enter_idle_mode()
+        
+        if not self._standby_active and (now - self._last_hand_at >= _STANDBY_TIMEOUT_S):
+            self._enter_standby()
+
         self.update_dwell_selection()
         self.update()
 
@@ -224,29 +252,53 @@ class MainWindow(QWidget):
         angle = (-math.degrees(math.atan2(dy, dx)) + 360) % 360
         return int(angle // 60) % 6
 
-    def _record_interaction(self): self._last_interaction = time.monotonic(); self._idle_active = False
+    def _record_interaction(self): self._last_interaction = time.monotonic(); self._exit_idle_mode()
     def _enter_idle_mode(self): self._idle_active = True
+    def _exit_idle_mode(self): self._idle_active = False
+    
+    def trigger_standby_test(self): self._enter_standby(); self.update()
+    def _enter_standby(self): self._standby_active = True
+    def _exit_standby(self): self._standby_active = False
 
     def paintEvent(self, event):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height(); cx, cy = w/2, h/2
         p.fillRect(self.rect(), QColor("#020203"))
+        
+        note_id = self._idle_note if self._idle_active else self._selected_note_id
         channels = self._get_active_channels()
-        p.save(); p.translate(cx, cy); p.rotate(31)
+        
+        p.save(); p.translate(cx, cy); p.rotate(30)
         self._draw_wave(p, -1000, 0, 2000, channels); p.restore()
+        
         base_r = min(w, h); sel_r = base_r * self.selector_radius_scale
-        center_r = base_r * self.center_plate_radius_scale; preview_r = max(150, base_r * 0.13)
+        center_r = base_r * self.center_plate_radius_scale; preview_r = max(150, base_r * 0.15)
+        
         self._draw_selector(p, cx, cy, sel_r)
         self._draw_center_plate(p, cx, cy, center_r)
         self._draw_dwell_ring(p, cx, cy, sel_r)
+        
         px, py = w - preview_r - 20, h - preview_r - 20
         self._draw_preview_disc(p, px, py, preview_r)
+        
         self._draw_hands(p)
         self._draw_image_button(p, w - 104, 16)
+        
+        if self._standby_active: self._draw_standby_overlay(p, cx, cy, center_r)
+        
+        if self._idle_active:
+            pulse = 0.55 + 0.45 * abs(math.sin(self.t * 0.6))
+            p.setPen(QColor(0, 217, 232, int(200 * pulse)))
+            p.setFont(QFont("Arial", 13, QFont.Bold))
+            sym = self._id_for_note(self._idle_note) or "—"
+            p.drawText(QRectF(16, 16, 400, 24), Qt.AlignLeft | Qt.AlignVCenter, f"● ATTRACT  note {self._idle_note}  ({sym})")
+
         if self._logo:
             lh = 100; lw = int(lh * self._logo.width() / self._logo.height())
             p.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
-        self._draw_hints(p, w, h); self._draw_heartbeat_indicator(p, w)
+        
+        if self._hints_visible: self._draw_hints(p, w, h)
+        self._draw_heartbeat_indicator(p, w)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
         wave_count = 4; spacing = 44; speed = self.t * 4.0; base_amp = 20 + 15 * self.wave_amplitude
@@ -259,11 +311,11 @@ class MainWindow(QWidget):
         else: amps = [1.0]*4; wk = [0.055]*4; ph = [0, 1.57, 3.14, 4.71]
         for wi in range(wave_count):
             baseline = y0 + (wi - 1.5) * spacing; amp, pph, wwk, col = base_amp * amps[wi], ph[wi], wk[wi], colors[wi]
-            pts = [QPointF(x0 + x, baseline + math.sin(x*wwk + speed + pph)*amp) for x in range(0, length, 3)]
+            pts = [QPointF(x0 + x, baseline + math.sin(x*wwk + speed + pph)*amp) for x in range(0, length, _WAVE_STEP_BG)]
             glow = QColor(col); glow.setAlpha(42); p.setPen(QPen(glow, 10, Qt.SolidLine, Qt.RoundCap))
-            for i in range(len(pts)-1): p.drawLine(pts[i], pts[i+1])
+            p.drawPolyline(QPolygonF(pts))
             lc = QColor(col); lc.setAlpha(210); p.setPen(QPen(lc, 3, Qt.SolidLine, Qt.RoundCap))
-            for i in range(len(pts)-1): p.drawLine(pts[i], pts[i+1])
+            p.drawPolyline(QPolygonF(pts))
             dot_off = (0.0, length/3.0, 2.0*length/3.0)
             p.setBrush(col); p.setPen(QPen(Qt.white, 2))
             for off in dot_off:
@@ -314,7 +366,7 @@ class MainWindow(QWidget):
         for r in (0.32, 0.58, 0.82): p.drawEllipse(QPointF(cx, cy), radius*r, radius*r)
 
     def _draw_chladni_contours_engine(self, p, cx, cy, radius):
-        n = 4 + self.selected_section%3; m = 6 + (self.selected_section+1)%4; scale = math.pi/radius; step = max(3, int(radius/30))
+        n = 4 + self.selected_section%3; m = 6 + (self.selected_section+1)%4; scale = math.pi/radius; step = max(3, int(radius/34))
         p.setPen(QPen(QColor("#2d1a0d"), max(2, int(radius*0.018)), Qt.SolidLine, Qt.RoundCap))
         def val(x, y): dx, dy = x-cx, y-cy; return (math.sin(n*dx*scale)*math.sin(m*dy*scale) - math.sin(m*dx*scale)*math.sin(n*dy*scale))
         def inside(x, y): return (x-cx)**2 + (y-cy)**2 <= radius**2
@@ -345,8 +397,24 @@ class MainWindow(QWidget):
         if color == QColor("#ff3030"): p.setBrush(Qt.NoBrush); p.setPen(QPen(QColor("#ffe100"), 3)); p.drawEllipse(lms[8], 16, 16)
         if closed: p.setBrush(QColor(255,255,255,220)); p.drawEllipse(lms[0], 10, 10)
 
+    def _draw_standby_overlay(self, p, cx, cy, center_r):
+        pulse = 0.60 + 0.40 * abs(math.sin(self.t * 1.2)); w = self.width(); scale = 300; alpha = int(210 * pulse)
+        p.setOpacity(0.38 * pulse)
+        l_pts = [QPointF(w*0.14 - dx*scale, cy+dy*scale) for dx,dy in _GHOST_HAND_PTS]
+        r_pts = [QPointF(w*0.86 + dx*scale, cy+dy*scale) for dx,dy in _GHOST_HAND_PTS]
+        self._draw_hand_skeleton(p, l_pts, QColor("#00eaff"), False)
+        self._draw_hand_skeleton(p, r_pts, QColor("#ff3030"), False)
+        p.setOpacity(1.0)
+        p.setFont(QFont("Arial", 13, QFont.Bold)); p.setPen(QColor(0, 234, 255, alpha))
+        p.drawText(QRectF(w*0.14-90, cy+24, 180, 26), Qt.AlignCenter, "✊  CLOSE")
+        p.setPen(QColor(180, 240, 255, alpha)); p.drawText(QRectF(w*0.14-90, cy+52, 180, 26), Qt.AlignCenter, "✋  OPEN")
+        p.setPen(QColor(255, 80, 80, alpha)); p.drawText(QRectF(w*0.86-110, cy+24, 220, 26), Qt.AlignCenter, "MOVE INTO A NOTE")
+        p.setPen(QColor(0, 217, 232, alpha)); p.setFont(QFont("Arial", 15, QFont.Bold))
+        p.drawText(QRectF(cx-340, cy+center_r+75, 680, 100), Qt.AlignCenter, "COME TRY!  SELECT A MUSIC NOTE")
+
     def _draw_hints(self, p, w, h):
-        hints = [("[M]", "Câmeras"), ("[I]", "Diagnósticos"), ("[F]", "♯ Modo")]
+        hb_label = "HB On" if self._heartbeat_enabled else "HB Off"
+        hints = [("[M]", "Câmeras"), ("[I]", "Diagnósticos"), ("[F]", "♯ Modo"), ("[H]", hb_label)]
         kf, lf = QFont("Arial", 11, QFont.Bold), QFont("Arial", 11); gap = 18; hy = h - 22; fm = p.fontMetrics()
         tw = sum(fm.horizontalAdvance(k)+fm.horizontalAdvance("  "+l) for k,l in hints) + gap*(len(hints)-1); hx = (w-tw)/2
         for k, l in hints:
@@ -354,6 +422,7 @@ class MainWindow(QWidget):
             p.setFont(lf); p.setPen(QColor("#3a4a5a")); p.drawText(QRectF(hx, hy-14, fm.horizontalAdvance("  "+l), 18), Qt.AlignLeft, "  "+l); hx += fm.horizontalAdvance("  "+l)+gap
 
     def _draw_heartbeat_indicator(self, p, w):
+        if not self._heartbeat_enabled: return
         if self.client.is_connected: pulse = 0.45+0.55*abs(math.sin(self.t*1.9)); col = QColor(0,255,37,int(210*pulse)); lbl = "HB OK"
         else: col = QColor("#ff0038"); lbl = "HB FAIL"
         dx, dy = w-168.0, 8.0; p.setBrush(col); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(dx, dy), 4, 4)
@@ -363,21 +432,25 @@ class MainWindow(QWidget):
         self.image_btn_rect = QRectF(x, y, 88, 64); base = QColor("#1d8dbf") if self.using_image_mode() else QColor("#24252b")
         if self.image_btn_hover: base = base.lighter(132)
         p.setBrush(base); p.setPen(QPen(QColor("#7adfff") if self.using_image_mode() else QColor("#4a4c55"), 3)); p.drawRoundedRect(self.image_btn_rect, 8, 8)
-        p.setPen(QPen(Qt.white, 3, Qt.SolidLine, Qt.RoundCap)); p.setBrush(QColor(255,255,255,42)); bx, by = self.image_btn_rect.center().x(), self.image_btn_rect.center().y()
+        p.setPen(QPen(Qt.white, 3, Qt.SolidLine, Qt.RoundCap)); p.setBrush(QColor(255, 255, 255, 42))
+        bx, by = self.image_btn_rect.center().x(), self.image_btn_rect.center().y()
         p.drawRoundedRect(QRectF(bx-18, by-2, 36, 24), 8, 8)
         for i in range(4): p.drawRoundedRect(QRectF(bx-22+i*11, self.image_btn_rect.top()+16, 10, 24), 5, 5)
         p.drawLine(QPointF(bx-8, by+20), QPointF(bx-18, by+10)); p.drawLine(QPointF(bx+8, by+20), QPointF(bx+18, by+10))
 
     def set_tracked_hands(self, left, right, closed, cursor):
+        if left or right: self._last_hand_at = time.monotonic(); self._exit_standby(); self._record_interaction()
         self.left_hand, self.right_hand, self.blue_hand_closed = left, right, closed
-        if cursor: self.mouse_pos = cursor; self.hover_section = self.section_at(self.mouse_pos)
-        self._record_interaction()
+        if cursor: self.mouse_pos = cursor; self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos)
+        self.update()
 
     def set_center_live_image(self, img): self.center_live_image = img; self.update()
     def keyPressEvent(self, e):
         if e.key()==Qt.Key_I: self.testing_toggle.emit()
         elif e.key()==Qt.Key_M: self.settings_requested.emit()
-        elif e.key()==Qt.Key_F: self.blue_hand_closed = True; self.sharp_mode_until = time.monotonic()+86400
+        elif e.key()==Qt.Key_H: self._heartbeat_enabled = not self._heartbeat_enabled; self.heartbeat_toggled.emit(self._heartbeat_enabled)
+        elif e.key()==Qt.Key_B: self._hints_visible = not self._hints_visible
+        elif e.key()==Qt.Key_F: self.blue_hand_closed = True; self.sharp_mode_until = time.monotonic()+86400; self._record_interaction()
         super().keyPressEvent(e)
     def keyReleaseEvent(self, e):
         if e.key()==Qt.Key_F: self.blue_hand_closed = False; self.sharp_mode_until = 0.0; self.update()
@@ -385,3 +458,4 @@ class MainWindow(QWidget):
     def mouseMoveEvent(self, e): self.mouse_pos = QPointF(e.position()); self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos); self._record_interaction(); self.update()
     def mousePressEvent(self, e):
         if e.button()==Qt.LeftButton and self.image_btn_rect.contains(e.position()): self.image_mode = not self.image_mode; self._record_interaction(); self.update()
+    def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self.update(); super().leaveEvent(e)
