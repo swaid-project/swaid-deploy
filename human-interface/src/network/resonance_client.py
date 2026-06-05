@@ -4,10 +4,19 @@ import threading
 import queue
 import time
 import logging
+import uuid
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger("ResonanceClient")
+
 logger = logging.getLogger("ResonanceClient")
+logger.setLevel(logging.DEBUG) # Set to DEBUG to capture payload traffic
+
+file_handler = logging.FileHandler("client_ipc.log")
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 class ResonanceClient:
     """
@@ -58,8 +67,13 @@ class ResonanceClient:
 
             # 2. Network I/O with Timeout Safety
             try:
+                trace_id = payload.get("trace_id", "ping-beat")
+                logger.debug(f"[SEND] Trace: {trace_id} | Payload: {payload}") # <-- LOG SEND
+                
                 socket.send_json(payload)
                 response = socket.recv_json()
+                
+                logger.debug(f"[RECV] Trace: {trace_id} | Response: {response}") # <-- LOG RECV
 
                 # 3. Update Cached State (Piggybacking)
                 if isinstance(response, dict):
@@ -99,6 +113,7 @@ class ResonanceClient:
     def trigger(self, chladni_id: str, music_note: int, led_effect: int, vol_l: int = 100, vol_r: int = 100):
         """Enqueues a trigger command for the physical and musical state."""
         self._command_queue.put({
+            "trace_id": f"req-{uuid.uuid4().hex[:8]}",
             "message_type": "trigger",
             "chladni_id": str(chladni_id),
             "music_note": int(music_note),
@@ -117,6 +132,7 @@ class ResonanceClient:
             
         if cmd:
             self._command_queue.put({
+                "trace_id": f"req-{uuid.uuid4().hex[:8]}",
                 "message_type": "channel_state",
                 "command": cmd
             })
@@ -135,6 +151,7 @@ class ResonanceClient:
             cmd["phase_deg"] = float(phase_deg)
 
         self._command_queue.put({
+            "trace_id": f"req-{uuid.uuid4().hex[:8]}",
             "message_type": "manual_audio",
             "command": cmd
         })
@@ -142,6 +159,7 @@ class ResonanceClient:
     def manual_led(self, led_effect_id: int):
         """Enqueues a manual LED effect override."""
         self._command_queue.put({
+            "trace_id": f"req-{uuid.uuid4().hex[:8]}",
             "message_type": "manual_led",
             "command": {"led_effect": int(led_effect_id)}
         })
