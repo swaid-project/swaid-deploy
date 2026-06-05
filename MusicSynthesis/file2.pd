@@ -52,8 +52,6 @@
 #X obj 1100 506 + 60;
 #X obj 570 19 inlet;
 #X obj 331 672 outlet;
-#X obj 1516 51 netreceive -u 3000;
-#X obj 1511 104 s symbol;
 #X connect 0 0 1 0;
 #X connect 1 0 2 0;
 #X connect 2 0 3 0;
@@ -119,4 +117,3 @@
 #X connect 49 0 36 0;
 #X connect 50 0 39 0;
 #X connect 51 0 0 0;
-#X connect 53 0 54 0;
