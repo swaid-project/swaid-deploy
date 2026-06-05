@@ -6,30 +6,29 @@
 // libpd
 #include "z_libpd.h"
 
-// --- Global State Definitions
-std::vector<Generator> generators(8);
-SystemConfig systemConfig;
-std::atomic<double> measuredLatency{0.0};
-std::atomic<bool> headsetMode{false};
-std::atomic<bool> masterMute{false};
-std::atomic<bool> musicMute{false};
-std::atomic<float> musicVolL{1.0f};
-std::atomic<float> musicVolR{1.0f};
+// --- Audio Device Discovery
+int findAudioDeviceByName(const std::string& nameSubstr, int minChannels) {
+    int numDevices = Pa_GetDeviceCount();
+    if (numDevices < 0) {
+        std::cerr << "[Audio] PortAudio error: " << Pa_GetErrorText(numDevices) << "\n";
+        return -1;
+    }
 
-std::atomic<int> transducerDeviceIdx{-1};
-std::atomic<int> musicDeviceIdx{-1};
+    for (int i = 0; i < numDevices; i++) {
+        const PaDeviceInfo* info = Pa_GetDeviceInfo(i);
+        if (!info) continue;
+        
+        std::string deviceName = info->name;
+        if (deviceName.find(nameSubstr) != std::string::npos && info->maxOutputChannels >= minChannels) {
+            std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << " | Out: " << info->maxOutputChannels << ")\n";
+            return i;
+        }
+    }
 
-std::atomic<int> diag_pico_serial{0};
-std::atomic<int> diag_usb_audio{0};
-std::atomic<int> diag_hdmi_audio{0};
+    return -1;
+}
 
-// --- Constants
-const double PI = 3.14159265358979323846;
-int SAMPLE_RATE = 48000;
-const int FRAMES_PER_BUFFER = 512;
-const int NUM_CHANNELS = 8;
-const int NUM_GENERATORS = 8;
-
+// --- Config loading
 bool loadSystemConfig(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
@@ -62,27 +61,6 @@ bool loadSystemConfig(const std::string& path) {
         std::cerr << "[Config] Parse error in system_config.json: " << e.what() << "\n";
         return false;
     }
-}
-
-int findAudioDeviceByName(const std::string& nameSubstr, int minChannels) {
-    int numDevices = Pa_GetDeviceCount();
-    if (numDevices < 0) {
-        std::cerr << "[Audio] PortAudio error: " << Pa_GetErrorText(numDevices) << "\n";
-        return -1;
-    }
-
-    for (int i = 0; i < numDevices; i++) {
-        const PaDeviceInfo* info = Pa_GetDeviceInfo(i);
-        if (!info) continue;
-        
-        std::string deviceName = info->name;
-        if (deviceName.find(nameSubstr) != std::string::npos && info->maxOutputChannels >= minChannels) {
-            std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << " | Out: " << info->maxOutputChannels << ")\n";
-            return i;
-        }
-    }
-
-    return -1;
 }
 
 void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l, int vol_r) {

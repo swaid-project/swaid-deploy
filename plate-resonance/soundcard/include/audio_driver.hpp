@@ -64,6 +64,7 @@ extern std::atomic<int> musicDeviceIdx;
 extern std::atomic<int> diag_pico_serial;
 extern std::atomic<int> diag_usb_audio;
 extern std::atomic<int> diag_hdmi_audio;
+extern std::atomic<bool> pd_patch_loaded; // Global safeguard for PD status
 
 // --- Constants 
 extern const double PI;
