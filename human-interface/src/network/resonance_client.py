@@ -7,8 +7,9 @@ import logging
 import uuid
 
 # Configure logging
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger("ResonanceClient")
+logging.basicConfig(level=logging.DEBUG, format='[Python UI] %(levelname)s: %(message)s')
+logger = logging.getLogger("ResonanceClient")
+
 
 logger = logging.getLogger("ResonanceClient")
 logger.setLevel(logging.DEBUG) # Set to DEBUG to capture payload traffic

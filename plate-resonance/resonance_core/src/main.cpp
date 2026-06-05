@@ -1,11 +1,23 @@
 #include "../include/resonance_server.hpp"
 #include "../../soundcard/include/audio_driver.hpp"
 #include "../../led_driver/include/embedded_sal.hpp"
+#include <csignal>
 
-// Forward declaration of the stream setup logic
-bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream);
+// Signal handler for graceful shutdown
+void handle_sigint(int sig) {
+    std::cout << "\n\n[Core] Caught signal " << sig << ". Commencing graceful shutdown...\n";
+    jsonLive.store(false);
+    hardwareWorkerRunning.store(false);
+}
 
 int main() {
+    // Register the signal handlers right at the start
+    std::signal(SIGINT, handle_sigint);
+    std::signal(SIGTERM, handle_sigint);
+
+    // Forward declaration of the stream setup logic
+    bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream);
+
     // 1. Load System Configuration
     if (!loadSystemConfig("../system_config.json")) {
         std::cerr << "FATAL: Could not load system_config.json\n";

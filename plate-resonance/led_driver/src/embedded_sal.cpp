@@ -109,8 +109,14 @@ int EmbeddedSAL::findPicoPort() {
 
     for (int i = 0; commonPaths[i]; i++) {
         if (access(commonPaths[i], F_OK) == 0) {
-            int fd = open(commonPaths[i], O_RDWR | O_NOCTTY | O_NDELAY);
-            if (fd >= 0) return fd;
+            std::cout << "[LED SAL] Attempting to open port: " << commonPaths[i] << " ...\n";
+            int fd = open(commonPaths[i], O_RDWR | O_NOCTTY | O_SYNC);
+            if (fd >= 0) {
+                std::cout << "[LED SAL] Successfully opened " << commonPaths[i] << "\n";
+                return fd;
+            } else {
+                std::cerr << "[LED SAL] Failed to open " << commonPaths[i] << ": " << strerror(errno) << "\n";
+            }
         }
     }
 
@@ -120,12 +126,17 @@ int EmbeddedSAL::findPicoPort() {
         struct dirent* entry;
         while ((entry = readdir(dir)) != nullptr) {
             if (entry->d_type == DT_LNK || entry->d_type == DT_UNKNOWN) {
+                if (std::string(entry->d_name) == "." || std::string(entry->d_name) == "..") continue;
                 char path[512];
                 snprintf(path, sizeof(path), "/dev/serial/by-id/%s", entry->d_name);
-                int fd = open(path, O_RDWR | O_NOCTTY | O_NDELAY);
+                std::cout << "[LED SAL] Attempting to open ID port: " << path << " ...\n";
+                int fd = open(path, O_RDWR | O_NOCTTY | O_SYNC);
                 if (fd >= 0) {
+                    std::cout << "[LED SAL] Successfully opened " << path << "\n";
                     closedir(dir);
                     return fd;
+                } else {
+                    std::cerr << "[LED SAL] Failed to open " << path << ": " << strerror(errno) << "\n";
                 }
             }
         }

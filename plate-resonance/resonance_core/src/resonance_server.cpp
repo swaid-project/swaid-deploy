@@ -8,10 +8,6 @@
 
 #include <fstream>
 
-// Set to 1 to enable continuous hardware sync with PureData notes
-// Set to 0 to only sync on the initial ZMQ trigger
-#define CONTINUOUS_SYNC_ENABLED 0
-
 // Global LED Driver instance
 EmbeddedSAL ledDriver;
 
@@ -26,61 +22,17 @@ std::thread hardwareWorker;
 std::unordered_map<std::string, json> catalogue;
 std::unordered_map<int, std::string> musicNoteMap;
 
-// Global tracker for current note to prevent spam
-static int current_playing_note = -1;
+// Global tracker for current note to prevent UI flickering
+static std::atomic<int> current_playing_note{-1};
 static std::string current_active_chladni = "NONE";
 
 /**
  * @brief Simple receiver for libpd messages.
  * Note: These callbacks run in the AUDIO THREAD context.
- * NEVER perform blocking I/O here.
  */
 void pd_float_hook(const char *source, float value) {
-#if CONTINUOUS_SYNC_ENABLED
-    if (source && strcmp(source, "to_core") == 0) {
-        int note = static_cast<int>(value);
-        
-        // SAFETY NET: Only execute if the note actually changed
-        if (note != current_playing_note) {
-            current_playing_note = note; 
-            
-            // 1. Update Transducers (Safe atomic update)
-            if (musicNoteMap.count(note)) {
-                std::string chladni_id = musicNoteMap[note];
-                current_active_chladni = chladni_id;
-
-                if (catalogue.count(chladni_id)) {
-                    auto& pattern = catalogue[chladni_id];
-                    if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
-                        for (const auto& t : pattern["hardware_config"]["channels"]) {
-                            int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
-                            if (logical == -1 && t.contains("channel")) logical = t["channel"].get<int>();
-
-                            if (systemConfig.routing.logical_to_physical_transducer.count(logical)) {
-                                int physical = systemConfig.routing.logical_to_physical_transducer[logical];
-                                int idx = physical - 1;
-                                if (idx >= 0 && idx < 8) {
-                                    generators[idx].freq.store(t["frequency_hz"].get<float>());
-                                    if (t.contains("phase_deg"))
-                                        generators[idx].phaseDeg.store(t["phase_deg"].get<float>());
-                                    
-                                    // Transducers strictly use physics amplitudes, ignore music volumes
-                                    generators[idx].amp.store(t["amplitude"].get<float>());
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                current_active_chladni = "UNKNOWN";
-            }
-            
-            // 2. Queue LED update (Safe lock-free push)
-            // Offload Serial I/O to Thread 3
-            ledQueue.push(note % 20); 
-        }
-    }
-#endif
+    // Continuous sync logic removed. Hardware strictly follows ZMQ triggers.
+    (void)source; (void)value;
 }
 
 void hardwareWorkerThread() {
@@ -89,7 +41,6 @@ void hardwareWorkerThread() {
         auto effectId = ledQueue.pop();
         if (effectId.has_value()) {
             if (ledDriver.isConnected()) {
-                // If sendEffect fails, we've lost the hardware
                 if (!ledDriver.sendEffect(effectId.value())) {
                     std::cerr << "[Hardware Worker] Serial write failed. Entering recovery...\n";
                     diag_pico_serial.store(0);
@@ -98,22 +49,17 @@ void hardwareWorkerThread() {
                     diag_pico_serial.store(1);
                 }
             } else {
-                // Not connected, try to reconnect
                 diag_pico_serial.store(0);
                 if (ledDriver.connect()) {
                     std::cout << "[Hardware Worker] Pico reconnected.\n";
                     diag_pico_serial.store(1);
-                    // Re-send the effect that failed
                     ledDriver.sendEffect(effectId.value());
                 } else {
-                    // Wait before retrying to avoid CPU spam
                     std::this_thread::sleep_for(std::chrono::seconds(2));
-                    // Re-push the effect to the queue so it's not lost
                     ledQueue.push(effectId.value());
                 }
             }
         } else {
-            // No updates, check connection if we were disconnected
             if (!ledDriver.isConnected()) {
                 diag_pico_serial.store(0);
                 if (ledDriver.connect()) {
@@ -128,21 +74,6 @@ void hardwareWorkerThread() {
     std::cout << "[Hardware Worker] Thread stopping.\n";
 }
 
-std::ofstream serverLog("server_ipc.log", std::ios::app);
-
-void logIPC(const std::string& direction, const std::string& trace_id, const std::string& details) {
-    if (serverLog.is_open()) {
-        // Simple timestamp
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        char buf[30];
-        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&time));
-        
-        serverLog << "[" << buf << "] [" << direction << "] Trace: " << trace_id << " | " << details << "\n";
-        serverLog.flush();
-    }
-}
-
 // --- Diagnostic Helper
 json build_full_reply(const std::string& status) {
     json r;
@@ -154,7 +85,7 @@ json build_full_reply(const std::string& status) {
     r["diagnostics"]["hdmi_audio"]  = diag_hdmi_audio.load();
 
     // Active State (Piggybacking)
-    r["active_state"]["current_note"] = current_playing_note;
+    r["active_state"]["current_note"] = current_playing_note.load();
     r["active_state"]["current_chladni_id"] = current_active_chladni;
     
     return r;
@@ -203,9 +134,8 @@ void jsonListenerThread() {
     // Initialize libpd
     libpd_set_floathook(pd_float_hook);
     libpd_init();
-    libpd_init_audio(2, 2, SAMPLE_RATE); // 2 inputs, 2 outputs (for Music channels)
+    libpd_init_audio(2, 2, SAMPLE_RATE); 
     
-    // Compute libpd block size (usually 64)
     int pd_block_size = libpd_blocksize();
     std::cout << "[libpd] Initialized. Block size: " << pd_block_size << "\n";
 
@@ -214,7 +144,6 @@ void jsonListenerThread() {
     if (!patch) {
         std::cerr << "[libpd] Error: Could not open file1.pd in " << systemConfig.pd_patch_path << "\n";
     } else {
-        // Enable DSP: [; pd dsp 1(
         libpd_start_message(1);
         libpd_add_float(1.0f);
         libpd_finish_message("pd", "dsp");
@@ -257,7 +186,6 @@ void jsonListenerThread() {
 		zmq::message_t msg;
 		auto result = rep_socket.recv(msg, zmq::recv_flags::none);
 		
-        // Check failsafe even if no message received
         long long now = std::chrono::system_clock::now().time_since_epoch().count() / 1000000000;
         if (now - lastHeartbeat.load() > 3) {
             if (!masterMute.load()) {
@@ -274,17 +202,19 @@ void jsonListenerThread() {
         try {
             message = json::parse(payload);
         } catch (const std::exception& e) {
-            logIPC("ERROR", "UNKNOWN", std::string("JSON parse error: ") + e.what());
+            std::cerr << "JSON parse error: " << e.what() << "\n";
             rep_socket.send(zmq::str_buffer("{\"status\": \"error\", \"reason\": \"invalid_json\"}"), zmq::send_flags::none);
             continue;
         }
 
         std::string type = message["message_type"].get<std::string>();
 
-        std::string trace_id = message.contains("trace_id") ? message["trace_id"].get<std::string>() : "ping-beat";
+        // --- Terminal Logging (Ignoring Ping spam) ---
+        if (type != "ping") {
+            std::cout << "\n[ZMQ Server RX] <- " << payload << "\n";
+        }
 
         if (type == "ping") {
-            logIPC("RECV", trace_id, "Ping received");
             lastHeartbeat.store(now);
             std::string reply_str = build_full_reply("pong").dump();
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
@@ -303,28 +233,20 @@ void jsonListenerThread() {
 
             std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect 
                       << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
-            
-            logIPC("RECV", trace_id, "Trigger: " + chladni_id + " | Note: " + std::to_string(music_note));
+
+            // 1. Seed PureData
             libpd_float("from_core", (float)music_note);
 
-#if !CONTINUOUS_SYNC_ENABLED
-            // Direct Hardware Dispatch (Restored)
+            // 2. Immediate Hardware Dispatch
             ledQueue.push(led_effect);
             applyPattern(catalogue, chladni_id, vol_l, vol_r);
 
-            // Freeze the active state to the triggered values
-            current_playing_note = music_note;
+            // 3. Update static state for UI feedback
+            current_playing_note.store(music_note);
             current_active_chladni = chladni_id;
-#else
-            // In Continuous mode, we only trigger the music; 
-            // the pd_float_hook will catch the feedback and update hardware.
-            ledQueue.push(led_effect); 
-            // Note: applyPattern not strictly needed if pd_float_hook is active, 
-            // but we keep ledQueue here for immediate LED reaction.
-#endif
 
             std::string reply_str = build_full_reply("ok").dump();
-            logIPC("SEND", trace_id, "Reply OK");
+            std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         } 
         else if (type == "manual_audio") {
@@ -338,35 +260,30 @@ void jsonListenerThread() {
                     generators[ch].phaseDeg.store(message["command"]["phase_deg"].get<float>());
             }
             std::string reply_str = build_full_reply("ok").dump();
-            logIPC("SEND", trace_id, "Reply OK");
+            std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         }
         else if (type == "manual_led") {
             int ledId = message["command"]["led_effect"].get<int>();
-            logIPC("RECV", trace_id, "Manual LED Request ID: " + std::to_string(ledId));
             ledQueue.push(ledId);
             std::string reply_str = build_full_reply("ok").dump();
-            logIPC("SEND", trace_id, "Reply OK");
+            std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         }
         else if (type == "channel_state") {
-            logIPC("RECV", trace_id, "Channel State Update");
             if (message["command"].contains("transducer_mute")) {
                 masterMute.store(message["command"]["transducer_mute"].get<bool>());
             }
             if (message["command"].contains("music_mute")) {
                 bool mute = message["command"]["music_mute"].get<bool>();
                 musicMute.store(mute);
-                if (mute) {
-                    libpd_float("from_core", -1.0f);
-                }
+                if (mute) libpd_float("from_core", -1.0f);
             }
             std::string reply_str = build_full_reply("ok").dump();
-            logIPC("SEND", trace_id, "Reply OK");
+            std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
         }
         else {
-            logIPC("ERROR", trace_id, "Unknown Command");
             rep_socket.send(zmq::str_buffer("{\"status\": \"unknown_command\"}"), zmq::send_flags::none);
         }
 	}
