@@ -16,6 +16,7 @@ LockFreeQueue<int> ledQueue;
 
 // Hardware Background Worker State
 std::atomic<bool> hardwareWorkerRunning{false};
+std::atomic<bool> pd_patch_loaded{false}; // SAFEGUARD FLAG
 std::thread hardwareWorker;
 
 // Global catalogue maps
@@ -28,7 +29,6 @@ static std::string current_active_chladni = "NONE";
 
 /**
  * @brief Simple receiver for libpd messages.
- * Note: These callbacks run in the AUDIO THREAD context.
  */
 void pd_float_hook(const char *source, float value) {
     // Continuous sync logic removed. Hardware strictly follows ZMQ triggers.
@@ -142,8 +142,10 @@ void jsonListenerThread() {
     // Load the PureData patch
     void* patch = libpd_openfile("file1.pd", systemConfig.pd_patch_path.c_str());
     if (!patch) {
-        std::cerr << "[libpd] Error: Could not open file1.pd in " << systemConfig.pd_patch_path << "\n";
+        std::cerr << "[libpd] ERROR: Could not open file1.pd in " << systemConfig.pd_patch_path << "\n";
+        pd_patch_loaded.store(false);
     } else {
+        pd_patch_loaded.store(true);
         libpd_start_message(1);
         libpd_add_float(1.0f);
         libpd_finish_message("pd", "dsp");
@@ -209,7 +211,7 @@ void jsonListenerThread() {
 
         std::string type = message["message_type"].get<std::string>();
 
-        // --- Terminal Logging (Ignoring Ping spam) ---
+        // --- Deep Diagnostic Logging (Ignoring Ping spam) ---
         if (type != "ping") {
             std::cout << "\n[ZMQ Server RX] <- " << payload << "\n";
         }

@@ -68,13 +68,15 @@ class ResonanceClient:
 
             # 2. Network I/O with Timeout Safety
             try:
-                trace_id = payload.get("trace_id", "ping-beat")
-                logger.debug(f"[SEND] Trace: {trace_id} | Payload: {payload}") # <-- LOG SEND
-                
+                # --- Deep Diagnostic Logging (Ignoring Pings) ---
+                if payload.get("message_type") != "ping":
+                    logger.debug(f"TX -> {json.dumps(payload)}")
+
                 socket.send_json(payload)
                 response = socket.recv_json()
-                
-                logger.debug(f"[RECV] Trace: {trace_id} | Response: {response}") # <-- LOG RECV
+
+                if payload.get("message_type") != "ping":
+                    logger.debug(f"RX <- {json.dumps(response)}")
 
                 # 3. Update Cached State (Piggybacking)
                 if isinstance(response, dict):
