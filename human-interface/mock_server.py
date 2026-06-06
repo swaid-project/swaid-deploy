@@ -63,7 +63,12 @@ def zmq_thread():
             
             if freeze_server:
                 if msg_type != "ping":
-                    print("[ZMQ] Server frozen. Ignoring request (will cause client timeout).")
+                    print("[ZMQ] Server frozen. Blocking request (will cause client timeout).")
+                while freeze_server:
+                    time.sleep(0.1)
+                # Must send a reply to reset the ZMQ REP socket state machine,
+                # even if the client has already timed out and disconnected.
+                socket.send_json(get_server_response())
                 continue
 
             if msg_type == "trigger":
