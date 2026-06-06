@@ -1,39 +1,53 @@
-# SWAID-ESIS
+# SWAID Human Interface (Python Client)
 
-Interface interativa de controlo vibroacústico para experiências com placas de Chladni, desenvolvida no âmbito do projeto SWAID na FEUP.
-
-A interface usa rastreamento de mãos por câmera (MediaPipe) para selecionar frequências sonoras num seletor circular. O padrão de Chladni no disco central e a animação das ondas são guiados por configurações embutidas na aplicação.
+This module implements the gesture-controlled interactive front-end for the SWAID Plate Resonance project. It captures video feed, tracks hand movements, determines selecting actions, and sends commands to the C++ Core via ZeroMQ (ZMQ).
 
 ---
 
-## Requisitos
+## Features
 
-- Python 3.10+
-- Câmera USB compatível com V4L2 (Linux) ou câmera integrada
-- Modelo MediaPipe: `models/hand_landmarker.task` (não incluído no repositório — ver abaixo)
-
----
-
-## Instalação
-
-```bash
-# Clonar o repositório
-git clone <url-do-repositorio>
-cd SWAID-ESIS
-
-# Criar ambiente virtual e instalar dependências
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Descarregar o modelo MediaPipe
-# https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker
-# Guardar como: models/hand_landmarker.task
-```
+- **MediaPipe Hand Tracking**: Real-time camera hand marker detection.
+- **Dwell-Based Selection**: Hovering a hand marker over one of the 6 sectors for 1.0 second triggers a new note.
+- **Special Modes**: 
+  - **Sharp Mode (♯)**: Triggered by keeping the left hand closed (fist) or pressing `F` on the keyboard. It toggles the selector into the sharp notes.
+  - **Live Camera Overlay**: Toggleable center disc showing either the raw camera feed or the static Chladni pattern preview.
+- **Fast Sync loop**: Runs a 100ms sync timer to fetch real-time server diagnostics (Pico Serial link, USB Audio status, PureData link, active notes, and current Chladni ID).
+- **Diagnostics Overlay**: Real-time performance monitoring showing framerates, total capturing-to-rendering latency, and CPU/RAM metrics.
 
 ---
 
-## Execução
+## Dependencies
+
+The client requires Python 3.10+ and the following Python packages:
+- `PySide6` (Qt6 UI toolkit)
+- `opencv-python` (Camera frames fetching and manipulation)
+- `mediapipe` (Hand landmark tracking model)
+- `numpy` (High-performance array operations)
+- `Pillow` (CMYK image decoding support)
+- `psutil` (System hardware performance metrics)
+- `pyzmq` (ZeroMQ client binding)
+
+---
+
+## Installation
+
+1. **Activate Environment and Install Packages**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+2. **Download Hand Tracking Model**:
+   Download Google's MediaPipe model from the [MediaPipe Hand Landmarker Guide](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker).
+   Place the downloaded `.task` file here:
+   `models/hand_landmarker.task`
+
+---
+
+## Execution
+
+Ensure that the C++ Resonance Core server is running first, then run:
 
 ```bash
 source venv/bin/activate
@@ -42,79 +56,31 @@ python main.py
 
 ---
 
-## Controlos de teclado
+## Interactive Controls
 
-| Tecla | Ação |
-|-------|------|
-| `M`   | Abre a janela de seleção de câmeras |
-| `I`   | Mostra / oculta o painel de diagnósticos de desempenho |
-| `F`   | Ativa o modo sustenido (♯) enquanto pressionado |
-| `Q`   | Fechar (apenas no modo demo standalone de `hand_tracking.py`) |
+### Keyboard Overrides
 
----
+| Key | Action |
+| :--- | :--- |
+| `M` | Open camera settings dialog (select tracking device, live center feed, center camera source). |
+| `I` | Toggle the diagnostic stats overlay. |
+| `F` | Hold to temporarily lock Sharp Mode (♯). |
+| `S` | Request server-side plate shuffle (redistributes sand). |
+| `H` | Toggle ZMQ heartbeat ping transmission (useful for testing failsafe timeout). |
+| `B` | Toggle visual guides/hints. |
 
-## Controlos com as mãos
+### Gesture Controls
 
-| Gesto | Ação |
-|-------|------|
-| Dedo indicador direito sobre um sector | Seleciona o sector após 1 s (dwell) |
-| Mão esquerda fechada (segurar) | Ativa o modo ♯ e muda para o conjunto de notas alternativo |
-
----
-
-## Estrutura do projeto
-
-```
-SWAID-ESIS/
-├── assets/
-│   └── LogoFeup.pdf          # Logótipo FEUP
-├── models/
-│   └── hand_landmarker.task   # Modelo MediaPipe (não incluído no git)
-├── hand_tracking.py           # Constantes de câmera e demo standalone
-├── Interface.py               # Janela principal (MainWindow)
-├── main.py                    # Ponto de entrada, threads de câmera, lógica de tracking
-├── requirements.txt
-└── README.md
-```
+| Hand Gesture | System Action |
+| :--- | :--- |
+| **Right Index Finger** over a sector | Fills the selection dwell indicator. Locks selection after 1.0s. |
+| **Left Hand Closed (Fist)** | Toggles Sharp Mode (♯) active. |
 
 ---
 
----
+## ZMQ Client Integration
 
-## Painel de diagnósticos (`I`)
+The front-end client leverages a non-blocking **Command Queue Pattern** inside `resonance_client.py`. 
 
-O painel sobreposto ao premir `I` mostra em tempo real:
-
-- **Camera FPS** — frames capturados pela câmera por segundo
-- **Tracking FPS** — ciclos de deteção MediaPipe por segundo
-- **Live Feed FPS** — frames emitidos para o centro da interface
-- **UI Update FPS** — frequência de redesenho da janela
-- **Camera → UI Delay** — latência total entre captura e atualização do ecrã (ms)
-- **CPU** — percentagem de uso por núcleo
-- **RAM** — percentagem de memória utilizada
-- **Detection rate** — probabilidade de deteção de mãos nos últimos 60 frames
-- **Hands visible** — número de mãos detetadas (0–2)
-- **Process CPU** — uso de CPU deste processo
-
----
-
-## Seleção de câmeras (`M`)
-
-Ao premir `M` abre-se um diálogo com três opções:
-
-- **Tracking das mãos** — câmera usada para detetar os gestos
-- **Centro** — modo de exibição central: `Símbolo` (padrão Chladni) ou `Live footage` (imagem da câmera)
-- **Câmera do centro** — câmera usada para o live footage (pode ser a mesma do tracking)
-
----
-
-## Dependências
-
-```
-PySide6          # Interface gráfica (Qt6)
-opencv-python    # Captura de câmera e processamento de imagem
-mediapipe        # Deteção de mãos
-numpy            # Operações matriciais
-Pillow           # Carregamento do logótipo TIFF CMYK
-psutil           # Métricas de CPU e RAM
-```
+- **Thread safety**: UI inputs enqueue command objects safely. A background thread processes commands sequentially and maintains the ZMQ socket state.
+- **Optimized Trigger API**: The UI triggers new note events by calling `client.trigger(music_note)`. The server takes care of the internal Chladni pattern mapping, LED assignments, and PureData routing internally.

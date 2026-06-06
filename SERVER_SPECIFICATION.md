@@ -28,7 +28,7 @@ When the C++ executable is launched, it must execute a strict, linear initializa
 
 3. **UDP Socket Initialization:**
 * Create UDP sockets bound to `localhost` targeting ports 3000 and 3001.
-* *Note:* PureData boots into `music_disable` by default. The C++ Server must **not** send an initialization message to port 3001 on boot, as the port operates as a blind toggle and sending a packet would accidentally enable it.
+* *Note:* PureData boots into `music_disable` by default. The C++ Server must explicitly send a disable message ("0") to port 3001 on boot to ensure that the music state is initialized to disabled.
 
 
 4. **Hardware Discovery & Connection:**
@@ -74,7 +74,7 @@ Fired when the Human-Interface detects a user gesture selecting a symbol.
 
 
 4. **LEDs:** Pushes the mapped `LED_effect` into a thread-safe Lock-Free Queue to be processed by the background Pico serial thread.
-5. **PureData (UDP 3000 & 3001):** Transmits the `music_note` payload via UDP to port 3000 to instruct PureData which musical sequence to generate. If `music_state` is currently `false` (disabled), the server sends a toggle message to port 3001 to enable the music, and updates its internal `music_state` to `true`.
+5. **PureData (UDP 3000 & 3001):** Transmits the `music_note` payload via UDP to port 3000 to instruct PureData which musical sequence to generate. If `music_state` is currently `false` (disabled), the server sends an enable message ("1") to port 3001 to enable the music, and updates its internal `music_state` to `true`. Once enabled, the music remains enabled unless explicitly muted or a timeout occurs.
 
 
 
@@ -114,7 +114,7 @@ Used to maintain the connection, keep the hardware alive, and synchronize UI sta
 
 * **Server Execution Sequence:**
 * The server updates a `last_ping_timestamp`. (See Section 6 for Timeout Logic).
-* If the system was previously in a timeout/muted state, receiving a ping immediately unmutes the soundcard channels and sends a toggle message to UDP 3001 to set PureData to `music_enable`.
+* If the system was previously in a timeout/muted state, receiving a ping immediately unmutes the soundcard channels, but the music remains disabled. The music will only be re-enabled upon the receipt of the next trigger message.
 
 
 
@@ -137,7 +137,7 @@ Allows the UI to manually override and mute specific outputs.
 
 * **Server Execution Sequence:**
 * **If `transducer_state` is `false` (0):** Instantly forces amplitudes on channels 5,6,7,8 to 0.0.
-* **If `music_state` is `false` (0):** Sends a toggle message to UDP 3001 to disable PureData. Updates internal `music_state` to `false`.
+* **If `music_state` is `false` (0):** Sends a disable message ("0") to UDP 3001 to disable PureData. Updates internal `music_state` to `false`.
 
 
 
@@ -231,7 +231,7 @@ To protect the physical Chladni plate hardware from overheating or generating no
 2. **Monitoring:** Inside the Main Watchdog thread loop, the server compares the current time to `last_valid_msg_time`.
 3. **The Trigger:** If the delta exceeds **2000 milliseconds (2.0 seconds)**, the server enters Emergency Mute:
 * Sets `diagnostics["transducer_state"] = 0` and forcefully fades amplitudes on channels 5-8 to 0.0.
-* Sets `diagnostics["music_state"] = 0` and sends a toggle message to UDP port 3001 to disable PureData.
+* Sets `diagnostics["music_state"] = 0` and sends a disable message ("0") to UDP port 3001 to disable PureData.
 
 
 4. **Recovery:** The instant a new `ping` or `trigger` is received, the timestamp is refreshed, the server automatically reverses the mute states, and normal operation resumes.

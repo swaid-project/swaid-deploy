@@ -1,23 +1,34 @@
 # LED Driver (Embedded SAL)
 
-Resilient Serial bridge for the SWAID visual feedback system.
+A resilient serial communication bridge designed for controlling NeoPixel visual feedback from the C++ Core.
+
+---
 
 ## Role
-Manages USB-Serial communication between the C++ Core and the Raspberry Pi Pico driving the NeoPixel strip.
+
+The C++ Core uses `EmbeddedSAL` to manage serial communication with a Raspberry Pi Pico acting as the LED strip controller. The driver offloads all serial operations to a background thread to guarantee that potential serial blocking doesn't interrupt time-critical DSP.
+
+---
 
 ## Features
 
-- **Asynchronous Execution**: Designed to be called by a background worker thread (`Thread 3`) to ensure Serial latency never blocks the audio engine.
-- **Self-Healing Loop**: If the USB cable is bumped or the Pico resets, the driver detects the `write()` failure, closes the port, and infinitely polls for a new link every 2 seconds.
-- **Auto-Discovery**: Scans `/dev/ttyACM*` and `/dev/ttyUSB*` automatically.
-- **FUDI-Lite Protocol**: ASCII based. Sends `FX:<id>\n`.
+- **Asynchronous Dispatching**: LED commands are pushed to a thread-safe SPSC (Single Producer Single Consumer) queue, keeping the main ZeroMQ thread responsive.
+- **Robust Self-Healing**: Detects device extraction, write timeouts, and interface disconnects. Automatically terminates the active descriptor and polls for a new serial interface `/dev/ttyACM*` or `/dev/ttyUSB*` every 2 seconds.
+- **FUDI-Lite Protocol**: Sends simple ASCII packets: `FX:<id>\n`.
+- **Hardware Agnostic**: Employs standard Unix serial terminal configurations (`termios`) matching 9600 baud, 8N1.
+
+---
 
 ## Pico Firmware
-The `src/*.ino` files contain the Arduino-based firmware for the Pico. It implements:
-- Smooth cross-fading between effects.
-- **Perceptual Gamma Correction**: Ensures LED brightness appears linear to the human eye.
 
-## contents
-- `include/embedded_sal.hpp`: Class definition with error trapping.
-- `src/embedded_sal.cpp`: Resilient I/O implementation.
-- `test/test_pico_led.py`: Direct debug utility.
+Arduino-compatible firmware sources for the Raspberry Pi Pico are located in the `src/` folder:
+- **Cross-Fading**: Includes smooth linear transitions between active LED effects.
+- **Gamma Correction**: Uses perceptual gamma curves to ensure linear LED intensity.
+
+---
+
+## File Contents
+
+- `include/embedded_sal.hpp`: Driver interface declaration and config state.
+- `src/embedded_sal.cpp`: Serial file-descriptor reading/writing and recovery loop implementation.
+- `test/test_pico_led.py`: Python utility to test raw command output directly to the hardware.
