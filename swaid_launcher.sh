@@ -30,7 +30,7 @@ trap 'echo "[Launcher] Shutting down system..."; kill $PD_PID $CORE_PID $UI_PID 
 
 # 3. Launch PureData in headless mode (audio output configured via QPWgraph)
 echo "[Launcher] Starting PureData..."
-pd -nogui "$PD_PATCH" > "$ROOT_DIR/pd.log" 2>&1 &
+pd -nogui -jack -send "; pd dsp 1" "$PD_PATCH" > "$ROOT_DIR/pd.log" 2>&1 &
 PD_PID=$!
 
 # Give PD time to bind UDP ports 3000/3001 before the server starts sending notes
