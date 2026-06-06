@@ -10,19 +10,36 @@ int findAudioDeviceByName(const std::string& nameSubstr, int minChannels) {
         std::cerr << "[Audio] PortAudio error: " << Pa_GetErrorText(numDevices) << "\n";
         return -1;
     }
-
     for (int i = 0; i < numDevices; i++) {
         const PaDeviceInfo* info = Pa_GetDeviceInfo(i);
-        if (!info) continue;
+
+        if (!info) 
+            continue;
         
         std::string deviceName = info->name;
-        if (deviceName.find(nameSubstr) != std::string::npos && info->maxOutputChannels >= minChannels) {
-            std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << " | Out: " << info->maxOutputChannels << ")\n";
-            return i;
+        
+        if (deviceName.find(nameSubstr) != std::string::npos) {
+            if (info->maxOutputChannels >= minChannels) {
+                std::cout << "[Audio] Found device: " << deviceName << " (Index: " << i << " | Out: " << info->maxOutputChannels << ")\n";
+                return i;
+            } else {
+                // If the channel count is 0, it means it is locked by another program!
+                std::cerr << "[Audio] WARNING: Found '" << deviceName 
+                          << "' at index " << i << ", but it reports " << info->maxOutputChannels 
+                          << " channels (Need " << minChannels << "). "
+                          << "It is likely locked by another process (Zombie core, PulseAudio, etc).\n";
+            }
         }
     }
 
+    std::cerr << "[Audio] FATAL: Could not find any unlocked device matching '" << nameSubstr << "'\n";
     return -1;
+
+    /* 1. Force kill any lingering instances of your C++ core
+    killall -9 resonance_core
+
+    2. Force kill any process holding the soundcard hardware open
+    sudo fuser -k /dev/snd/*  */
 }
 
 // --- Config loading
