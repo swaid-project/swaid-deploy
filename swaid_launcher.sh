@@ -26,15 +26,17 @@ echo "    Launching SWAID System (Production) "
 echo "========================================"
 
 # 2. Trap SIGINT/SIGTERM — kill all background processes on exit
-trap 'echo "[Launcher] Shutting down system..."; kill $PD_PID $CORE_PID $UI_PID 2>/dev/null; wait $PD_PID $CORE_PID 2>/dev/null; exit' SIGINT SIGTERM
+trap 'echo "[Launcher] Shutting down system..."; kill $PD_PID $CORE_PID $UI_PID 2>/dev/null; sudo pkill puredata; wait $PD_PID $CORE_PID 2>/dev/null; exit' SIGINT SIGTERM
 
-# 3. Launch PureData in headless mode (audio output configured via QPWgraph)
-echo "[Launcher] Starting PureData..."
-pd -nogui -alsa -send "; pd dsp 1" "$PD_PATCH" > "$ROOT_DIR/pd.log" 2>&1 &
+# 3. Launch PureData using OpenPureData.sh
+echo "[Launcher] Starting PureData via OpenPureData.sh..."
+cd "$ROOT_DIR/MusicSynthesis"
+./OpenPureData.sh &
 PD_PID=$!
+cd "$ROOT_DIR"
 
 # Give PD time to bind UDP ports 3000/3001 before the server starts sending notes
-sleep 1
+sleep 2
 
 # 4. Launch the C++ Core (relative paths expect cwd = plate-resonance/)
 echo "[Launcher] Starting Plate Resonance Server..."
@@ -56,4 +58,5 @@ wait $UI_PID
 echo "[Launcher] UI Closed."
 
 kill $CORE_PID $PD_PID 2>/dev/null
+sudo pkill puredata
 echo "[Launcher] System Shutdown Complete."

@@ -25,7 +25,6 @@ target_link_libraries(resonance_core PRIVATE
     cppzmq-static
     portaudio
     nlohmann_json::nlohmann_json
-    Eigen3::Eigen
     Threads::Threads
     dl
 )

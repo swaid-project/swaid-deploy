@@ -76,18 +76,20 @@ bool loadSystemConfig(const std::string& path) {
     }
 }
 
-void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l, int vol_r) {
-    (void)vol_l; (void)vol_r;
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int, int) {
     auto it = catalogue.find(symbol_id);
     if (it == catalogue.end()) return;
 
     const json& pattern = it->second;
-    std::vector<float> fromAmps(NUM_GENERATORS);
-    std::vector<float> toAmps(NUM_GENERATORS, 0.0f);
+    
+    long long fade_in = pattern.value("fade_in_ms", 100);
+    long long sustain = pattern.value("symbol_duration_ms", 500);
+    long long fade_out = pattern.value("fade_out_ms", 100);
 
-    for (int i = 0; i < NUM_GENERATORS; i++)
-        fromAmps[i] = generators[i].amp.load();
- 
+    long long now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
     if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
         for (const auto& t : pattern["hardware_config"]["channels"]) {
             int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
@@ -101,52 +103,70 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
                 generators[idx].freq.store(t["frequency_hz"].get<float>());
                 if (t.contains("phase_deg"))
                     generators[idx].phaseDeg.store(t["phase_deg"].get<float>());
-                toAmps[idx] = t["amplitude"].get<float>();
+                
+                generators[idx].targetAmp.store(t["amplitude"].get<float>());
+                generators[idx].t_start.store(now);
+                generators[idx].t_sustain.store(now + fade_in);
+                generators[idx].t_release.store(now + fade_in + sustain);
+                generators[idx].t_end.store(now + fade_in + sustain + fade_out);
             }
         }
     }
-
-    static std::atomic<unsigned long long> fadeGeneration{0};
-    unsigned long long myGen = ++fadeGeneration;
-    std::thread([fromAmps, toAmps, myGen]() {
-        const int steps = 20;
-        const int stepMs = 100 / steps;
-        for (int s = 1; s <= steps; s++) {
-            if (fadeGeneration.load(std::memory_order_relaxed) != myGen) return;
-            float t = (float)s / steps;
-            for (int i = 0; i < NUM_GENERATORS; i++)
-                generators[i].amp.store(fromAmps[i] + t * (toAmps[i] - fromAmps[i]));
-            std::this_thread::sleep_for(std::chrono::milliseconds(stepMs));
-        }
-        if (fadeGeneration.load(std::memory_order_relaxed) == myGen) {
-            for (int i = 0; i < NUM_GENERATORS; i++)
-                generators[i].amp.store(toAmps[i]);
-        }
-    }).detach();
 }
 
 void resetGenerators() {
     for (auto& gen : generators) {
         gen.freq.store(440.0f);
-        gen.amp.store(0.0f);
+        gen.targetAmp.store(0.0f);
         gen.phaseDeg.store(0.0f);
+        gen.t_start.store(0);
+        gen.t_sustain.store(0);
+        gen.t_release.store(0);
+        gen.t_end.store(0);
         gen.currentBasePhase = 0.0;
     }
 }
 
 void generateSineWaves(float* outBuffer, unsigned long frames, int numOutChannels) {
+    long long now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
     int activeGenerators = std::min(NUM_GENERATORS, numOutChannels);
-    for (unsigned int i = 0; i < frames; i++) {
-        for (int genIdx = 0; genIdx < activeGenerators; genIdx++) {
-            auto& gen = generators[genIdx];
-            float f = gen.freq.load();
-            float a = gen.amp.load();
-            if (a <= 0.00001f) continue;
-            float p = gen.phaseDeg.load() * (PI / 180.0);
-            double phaseIncrement = (2.0 * PI * f) / SAMPLE_RATE;
+    for (int genIdx = 0; genIdx < activeGenerators; genIdx++) {
+        auto& gen = generators[genIdx];
+        
+        float target = gen.targetAmp.load();
+        long long t0 = gen.t_start.load();
+        long long t1 = gen.t_sustain.load();
+        long long t2 = gen.t_release.load();
+        long long t3 = gen.t_end.load();
+
+        if (now >= t3 || target <= 0.0f) continue;
+
+        float currentAmp = 0.0f;
+        if (now < t0) {
+            currentAmp = 0.0f;
+        } else if (now < t1) {
+            if (t1 > t0) currentAmp = target * (float)(now - t0) / (t1 - t0);
+            else currentAmp = target;
+        } else if (now < t2) {
+            currentAmp = target;
+        } else if (now < t3) {
+            if (t3 > t2) currentAmp = target * (1.0f - (float)(now - t2) / (t3 - t2));
+            else currentAmp = 0.0f;
+        }
+
+        if (currentAmp <= 0.00001f) continue;
+
+        float f = gen.freq.load();
+        float p = gen.phaseDeg.load() * (PI / 180.0);
+        double phaseIncrement = (2.0 * PI * f) / SAMPLE_RATE;
+
+        for (unsigned int i = 0; i < frames; i++) {
             gen.currentBasePhase += phaseIncrement;
             if (gen.currentBasePhase >= 2.0 * PI) gen.currentBasePhase -= 2.0 * PI;
-            float sample = a * std::sin(gen.currentBasePhase + p);
+            float sample = currentAmp * std::sin(gen.currentBasePhase + p);
             outBuffer[i * numOutChannels + genIdx] += sample;
         }
     }
@@ -157,8 +177,7 @@ int transducerCallback(const void *inputBuffer, void *outputBuffer,
                          const PaStreamCallbackTimeInfo* timeInfo,
                          PaStreamCallbackFlags statusFlags,
                          void *userData) {
-    (void) inputBuffer; (void) statusFlags; (void) userData;
-    measuredLatency.store((timeInfo->outputBufferDacTime - timeInfo->currentTime) * 1000.0);
+    (void) inputBuffer; (void) statusFlags; (void) userData; (void) timeInfo;
     float *out = (float*)outputBuffer;
     for (unsigned int i = 0; i < framesPerBuffer * NUM_CHANNELS; i++) out[i] = 0.0f;
     if (masterMute.load()) return paContinue;

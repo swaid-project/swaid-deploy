@@ -22,11 +22,23 @@ PureDataSender pdMuteSender; // port 3001 — toggle mute/unmute (any message)
 
 // Global catalogue maps
 std::unordered_map<std::string, json> catalogue;
-std::unordered_map<int, std::string> musicNoteMap;
 
 // Global tracker for current note to prevent UI flickering
 static std::atomic<int> current_playing_note{-1};
 static std::string current_active_chladni = "NONE";
+
+bool is_system_busy() {
+    if (is_busy.load()) return true;
+    
+    long long now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
+    for (const auto& gen : generators) {
+        if (now < gen.t_end.load()) return true;
+    }
+    return false;
+}
 
 void hardwareWorkerThread() {
     std::optional<int> pendingRetry;
@@ -75,11 +87,12 @@ json build_full_reply(const std::string& status) {
     json r;
     r["status"] = status;
 
-    // Diagnostics
-    r["diagnostics"]["pico_serial"] = diag_pico_serial.load();
-    r["diagnostics"]["usb_audio"]   = diag_usb_audio.load();
-    r["diagnostics"]["hdmi_audio"]  = diag_hdmi_audio.load();
-    r["diagnostics"]["pd_udp"]      = pdSender.isReady() ? 1 : 0;
+    // Diagnostics (1 = Healthy/Active, 0 = Error/Muted)
+    r["diagnostics"]["pico_serial"]     = diag_pico_serial.load();
+    r["diagnostics"]["usb_audio"]       = diag_usb_audio.load();
+    r["diagnostics"]["UDP_connection"]   = pdSender.isReady() ? 1 : 0;
+    r["diagnostics"]["music_state"]      = musicMute.load() ? 0 : 1;
+    r["diagnostics"]["transducer_state"] = masterMute.load() ? 0 : 1;
 
     // Active State (Piggybacking)
     r["active_state"]["current_note"] = current_playing_note.load();
@@ -113,9 +126,6 @@ void populateMaps(const std::string& file) {
             if (entry.contains("display_name")) {
                 std::string name = entry["display_name"].get<std::string>();
                 catalogue[name] = entry;
-                if (entry.contains("music_note")) {
-                    musicNoteMap[entry["music_note"].get<int>()] = name;
-                }
             } 
         }
     }
@@ -171,11 +181,17 @@ void jsonListenerThread() {
 		zmq::message_t msg;
 		auto result = rep_socket.recv(msg, zmq::recv_flags::none);
 
-        long long now = std::chrono::system_clock::now().time_since_epoch().count() / 1000000000;
-        if (heartbeatReceived && now - lastHeartbeat.load() > 3) {
-            if (!masterMute.load()) {
-                std::cerr << "!!! FAILSAFE TRIGGERED: No heartbeat for 3s. Muting. !!!\n";
+        long long now = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+        if (heartbeatReceived && now - lastHeartbeat.load() >= 2) {
+            if (!masterMute.load() || !musicMute.load()) {
+                std::cerr << "!!! FAILSAFE TRIGGERED: No heartbeat for 2s. Muting hardware. !!!\n";
                 masterMute.store(true);
+                if (!musicMute.load()) {
+                    musicMute.store(true);
+                    pdMuteSender.sendNote(1);
+                }
                 muteFromFailsafe = true;
             }
         }
@@ -205,17 +221,79 @@ void jsonListenerThread() {
             lastHeartbeat.store(now);
             heartbeatReceived = true;
             // Auto-recover from failsafe mute when the UI reconnects
-            if (muteFromFailsafe && masterMute.load()) {
-                masterMute.store(false);
+            if (muteFromFailsafe) {
+                if (masterMute.load()) {
+                    masterMute.store(false);
+                    std::cout << "[Failsafe] Heartbeat restored. Unmuting transducers.\n";
+                }
+                if (musicMute.load()) {
+                    musicMute.store(false);
+                    pdMuteSender.sendNote(1);
+                    std::cout << "[Failsafe] Heartbeat restored. Unmuting music.\n";
+                }
                 muteFromFailsafe = false;
-                std::cout << "[Failsafe] Heartbeat restored. Unmuting.\n";
             }
             std::string reply_str = build_full_reply("pong").dump();
             rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
             continue;
         }
 
+        if (type == "shuffle") {
+            if (is_system_busy()) {
+                rep_socket.send(zmq::str_buffer("{\"status\": \"busy\"}"), zmq::send_flags::none);
+                continue;
+            }
+
+            std::cout << "[ZMQ Server] Received 'shuffle' command. Spawning detached thread.\n";
+            
+            std::thread([]() {
+                is_busy.store(true);
+                
+                // Collect all shuffle symbols in order
+                std::vector<std::string> shuffle_ids;
+                for (int i = 1; i < 100; i++) {
+                    std::string id = "SHUFFLE_" + std::to_string(i);
+                    if (catalogue.count(id)) {
+                        shuffle_ids.push_back(id);
+                    } else {
+                        break;
+                    }
+                }
+
+                for (const auto& id : shuffle_ids) {
+                    const auto& pattern = catalogue[id];
+                    long long total_ms = pattern.value("fade_in_ms", 100) + 
+                                         pattern.value("symbol_duration_ms", 500) + 
+                                         pattern.value("fade_out_ms", 100);
+                    
+                    std::cout << "[Shuffle] Executing " << id << " (" << total_ms << "ms)\n";
+                    applyPattern(catalogue, id);
+                    
+                    // Update diagnostics for the UI
+                    current_active_chladni = id;
+                    if (pattern.contains("LED_effect")) {
+                        ledQueue.push(pattern["LED_effect"].get<int>());
+                    }
+                    
+                    std::this_thread::sleep_for(std::chrono::milliseconds(total_ms));
+                }
+
+                current_active_chladni = "NONE";
+                is_busy.store(false);
+                std::cout << "[Shuffle] Sequence complete.\n";
+            }).detach();
+
+            std::string reply_str = build_full_reply("ok").dump();
+            rep_socket.send(zmq::message_t(reply_str), zmq::send_flags::none);
+            continue;
+        }
+
         if (type == "trigger") {
+            if (is_system_busy()) {
+                rep_socket.send(zmq::str_buffer("{\"status\": \"busy\"}"), zmq::send_flags::none);
+                continue;
+            }
+
             std::string chladni_id = message["chladni_id"].get<std::string>();
             int music_note = message["music_note"].get<int>();
             int led_effect = message["led_effect_id"].get<int>();
@@ -251,7 +329,7 @@ void jsonListenerThread() {
                 if (message["command"].contains("frequency_hz"))
                     generators[ch].freq.store(message["command"]["frequency_hz"].get<float>());
                 if (message["command"].contains("amplitude"))
-                    generators[ch].amp.store(message["command"]["amplitude"].get<float>());
+                    generators[ch].targetAmp.store(message["command"]["amplitude"].get<float>());
                 if (message["command"].contains("phase_deg"))
                     generators[ch].phaseDeg.store(message["command"]["phase_deg"].get<float>());
             }

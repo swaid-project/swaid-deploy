@@ -50,14 +50,12 @@ int main() {
             if (m_stream) { Pa_StopStream(m_stream); Pa_CloseStream(m_stream); m_stream = nullptr; }
             Pa_Terminate();
             diag_usb_audio.store(0);
-            diag_hdmi_audio.store(0);
 
             // Re-Initialize
             Pa_Initialize();
             if (setupAudioStreams(&t_stream, &m_stream)) {
                 std::cout << "[Watchdog] Audio restored successfully.\n";
                 diag_usb_audio.store(1);
-                if (m_stream || t_stream) diag_hdmi_audio.store(1); // Simplification
             } else {
                 std::cerr << "[Watchdog] Discovery failed. Retrying in 5 seconds...\n";
                 std::this_thread::sleep_for(std::chrono::seconds(5));

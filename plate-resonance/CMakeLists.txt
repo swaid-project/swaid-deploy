@@ -53,45 +53,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(portaudio)
 
-# 5. Eigen3
-set(EIGEN_BUILD_PKGCONFIG OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(EIGEN_LEAVE_TEST_IN_ALL_TARGET OFF CACHE BOOL "" FORCE)
-set(EIGEN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(EIGEN_BUILD_DOC OFF CACHE BOOL "" FORCE)
-
-FetchContent_Declare(
-    eigen
-    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-    GIT_TAG 3.4.0
-    EXCLUDE_FROM_ALL
-)
-FetchContent_GetProperties(eigen)
-if(NOT eigen_POPULATED)
-    FetchContent_Populate(eigen)
-    
-    # Eigen stubbornly creates an 'uninstall' target in its root CMakeLists.txt
-    # We create a dummy target *before* adding the subdirectory, but CMake 
-    # doesn't allow overriding add_custom_target. Instead, we patch the file:
-    file(READ ${eigen_SOURCE_DIR}/CMakeLists.txt EIGEN_CMAKE)
-    string(REPLACE "add_custom_target ( uninstall" "add_custom_target ( eigen_uninstall" EIGEN_CMAKE "${EIGEN_CMAKE}")
-    file(WRITE ${eigen_SOURCE_DIR}/CMakeLists.txt "${EIGEN_CMAKE}")
-
-    add_subdirectory(${eigen_SOURCE_DIR} ${eigen_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
-
-# 6. STB (Header-only, we create a small interface library)
-FetchContent_Declare(
-    stb
-    URL https://github.com/nothings/stb/archive/master.tar.gz
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-)
-FetchContent_MakeAvailable(stb)
-if(NOT TARGET stb)
-    add_library(stb INTERFACE)
-    target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
-endif()
-
 # --- Subdirectories ---
 # Order matters if there are internal dependencies
 add_subdirectory(puredata)

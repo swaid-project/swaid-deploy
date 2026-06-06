@@ -33,7 +33,13 @@ class ResonanceClient:
 
         # Cached State (Read by the UI)
         # Defaults reflect a "disconnected" or "unknown" state
-        self.diagnostics = {"pico_serial": 0, "usb_audio": 0, "hdmi_audio": 0}
+        self.diagnostics = {
+            "pico_serial": 0, 
+            "usb_audio": 0, 
+            "UDP_connection": 0,
+            "music_state": 0,
+            "transducer_state": 0
+        }
         self.active_state = {"current_note": -1, "current_chladni_id": "NONE"}
         self.is_connected = False
 
@@ -95,7 +101,13 @@ class ResonanceClient:
                     logger.warning("Server connection timed out.")
                 self.is_connected = False
                 # Zero out diagnostics to trigger UI warnings
-                self.diagnostics = {"pico_serial": 0, "usb_audio": 0, "hdmi_audio": 0}
+                self.diagnostics = {
+                    "pico_serial": 0, 
+                    "usb_audio": 0, 
+                    "UDP_connection": 0,
+                    "music_state": 0,
+                    "transducer_state": 0
+                }
 
                 # Rebuild socket to break the REQ/REP state machine deadlock
                 socket.close()
@@ -106,8 +118,8 @@ class ResonanceClient:
                 self.is_connected = False
                 time.sleep(1.0) # Back off on major errors
 
-            # Maintain ~2Hz loop (500ms) - Lowered from 20Hz as per Disabling Continuous Sync spec
-            time.sleep(0.5)
+            # Maintain 10Hz loop (100ms)
+            time.sleep(0.1)
 
         socket.close()
 
@@ -123,6 +135,13 @@ class ResonanceClient:
             "led_effect_id": int(led_effect),
             "vol_l": int(vol_l),
             "vol_r": int(vol_r)
+        })
+
+    def shuffle(self):
+        """Enqueues a shuffle command to clear the plate."""
+        self._command_queue.put({
+            "trace_id": f"req-{uuid.uuid4().hex[:8]}",
+            "message_type": "shuffle"
         })
 
     def set_channel_state(self, transducer_mute: bool = None, music_mute: bool = None):

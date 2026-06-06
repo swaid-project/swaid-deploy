@@ -22,8 +22,14 @@ using json = nlohmann::json;
 // --- Data Structures 
 struct Generator {
     std::atomic<float> freq{440.0f};
-    std::atomic<float> amp{0.0f};
+    std::atomic<float> targetAmp{0.0f};
     std::atomic<float> phaseDeg{0.0f};
+
+    // ASR Timestamps (milliseconds)
+    std::atomic<long long> t_start{0};
+    std::atomic<long long> t_sustain{0};
+    std::atomic<long long> t_release{0};
+    std::atomic<long long> t_end{0};
 
     double currentBasePhase = 0.0;
 };
@@ -48,10 +54,9 @@ extern const int NUM_GENERATORS;
 // --- Global state 
 extern std::vector<Generator> generators;
 extern SystemConfig systemConfig;
-extern std::atomic<double> measuredLatency; 
-extern std::atomic<bool> headsetMode; 
 extern std::atomic<bool> masterMute;
 extern std::atomic<bool> musicMute;
+extern std::atomic<bool> is_busy;
 
 // Device index resolved at runtime
 extern std::atomic<int> transducerDeviceIdx;
@@ -59,7 +64,6 @@ extern std::atomic<int> transducerDeviceIdx;
 // Diagnostic state (1 = OK, 0 = Lost/Polling)
 extern std::atomic<int> diag_pico_serial;
 extern std::atomic<int> diag_usb_audio;
-extern std::atomic<int> diag_hdmi_audio;
 
 // --- Constants 
 extern const double PI;

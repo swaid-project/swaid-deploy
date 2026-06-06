@@ -13,16 +13,14 @@ const char* ZMQ_ENDPOINT   = "ipc:///tmp/swaid.sock";
 std::vector<Generator> generators(8); 
 SystemConfig systemConfig;
 
-std::atomic<double> measuredLatency{0.0}; 
-std::atomic<bool> headsetMode{false}; 
 std::atomic<bool> masterMute{false};
 std::atomic<bool> musicMute{false};
+std::atomic<bool> is_busy{false};
 
 std::atomic<int> transducerDeviceIdx{-1};
 
 std::atomic<int> diag_pico_serial{0};
 std::atomic<int> diag_usb_audio{0};
-std::atomic<int> diag_hdmi_audio{0};
 
 
 const int NUM_CHANNELS    = 8; 

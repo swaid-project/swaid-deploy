@@ -75,6 +75,7 @@ class MainWindow(QWidget):
 
         # State tracking
         self._rendered_chladni_id = "NONE"
+        self._pattern_start_time = 0.0
         self._last_interaction = time.monotonic()
         self._last_hand_at = time.monotonic()
         self._idle_active = False
@@ -82,6 +83,15 @@ class MainWindow(QWidget):
         self._standby_active = False
         self._hints_visible = True
         self._heartbeat_enabled = True
+        
+        self.is_input_locked = False
+        self._lockout_timer = QTimer(self)
+        self._lockout_timer.setSingleShot(True)
+        self._lockout_timer.timeout.connect(self._unlock_input)
+
+    def _unlock_input(self):
+        self.is_input_locked = False
+        self.update()
 
     def _init_animation_state(self):
         self.t = 0.0
@@ -175,37 +185,65 @@ class MainWindow(QWidget):
 
     def _sync_and_diagnostics_loop(self):
         if not self.client.is_connected:
-            self.warning_banner.show_warning("CRITICAL: Plate Resonance Server Offline", critical=True)
+            self.warning_banner.show_warning("CRITICAL: C++ Core Offline. Please restart the system.", critical=True)
         elif self._camera_error:
             self.warning_banner.show_warning(self._camera_error, critical=True)
         elif self.client.diagnostics.get("usb_audio") == 0:
-            self.warning_banner.show_warning("WARNING: USB Soundcard Disconnected. Attempting recovery...", critical=False)
+            self.warning_banner.show_warning("WARNING: USB Soundcard disconnected. System attempting auto-recovery...", critical=False)
         elif self.client.diagnostics.get("pico_serial") == 0:
-            self.warning_banner.show_warning("WARNING: LED Controller Disconnected. Attempting recovery...", critical=False)
-        elif self.client.diagnostics.get("pd_udp") == 0:
-            self.warning_banner.show_warning("WARNING: PureData UDP not ready — music may be silent", critical=False)
+            self.warning_banner.show_warning("WARNING: LED Controller disconnected. System attempting auto-recovery...", critical=False)
+        elif self.client.diagnostics.get("UDP_connection") == 0:
+            self.warning_banner.show_warning("WARNING: PureData music link offline. Sound may be limited.", critical=False)
         else:
             self.warning_banner.hide_warning()
 
-        server_active_id = self.client.active_state.get("current_chladni_id")
-        if server_active_id and server_active_id != self._rendered_chladni_id:
+        server_active_id = self.client.active_state.get("current_chladni_id", "NONE")
+        if server_active_id != self._rendered_chladni_id:
             self._rendered_chladni_id = server_active_id
+            self._pattern_start_time = time.monotonic()
             if server_active_id in self.catalogue:
                 pattern = self.catalogue[server_active_id]
                 self._selected_note_id = pattern.get("music_note", 0)
+    
+    def _calculate_visual_envelope(self):
+        active_id = self._id_for_note(self._idle_note) if self._idle_active else self._rendered_chladni_id
+        
+        if active_id == "NONE" or active_id not in self.catalogue:
+            return 0.0
+            
+        pattern = self.catalogue[active_id]
+        fi = pattern.get("fade_in_ms", 100) / 1000.0
+        du = pattern.get("symbol_duration_ms", 500) / 1000.0
+        fo = pattern.get("fade_out_ms", 100) / 1000.0
+        
+        elapsed = time.monotonic() - self._pattern_start_time
+        
+        if elapsed < fi:
+            return elapsed / fi if fi > 0 else 1.0
+        elif elapsed < fi + du:
+            return 1.0
+        elif elapsed < fi + du + fo:
+            return 1.0 - (elapsed - (fi + du)) / fo if fo > 0 else 0.0
+        else:
+            return 0.0
 
     def update_animation(self):
         now = time.monotonic()
         if self._anim_last_time == 0.0: self._anim_last_time = now
         dt = min(now - self._anim_last_time, 0.05)
         self._anim_last_time = now
-        self.t += dt * 3.0
+        
+        self.wave_amplitude = self._calculate_visual_envelope()
+        
+        # Increment wave time only when vibrating
+        if self.wave_amplitude > 0:
+            self.t += dt * 3.0
         
         channels = self._get_active_channels()
-        if channels: self.frequency = sum(ch["frequency_hz"] for ch in channels) / len(channels)
-        else: self.frequency = 200.0
-
-        self.wave_amplitude = 0.50 + 0.45 * abs(math.sin(self.t * 0.9))
+        if channels: 
+            self.frequency = sum(ch["frequency_hz"] for ch in channels) / len(channels)
+        else: 
+            self.frequency = 200.0
 
         if not self._idle_active and (now - self._last_interaction >= IDLE_TIMEOUT_S):
             self._enter_idle_mode()
@@ -217,7 +255,10 @@ class MainWindow(QWidget):
         self.update()
 
     def update_dwell_selection(self):
-        if self._idle_active: return
+        if self._idle_active or self.is_input_locked: 
+            self.dwell_progress = 0.0
+            return
+        
         section = self.section_at(self.mouse_pos)
         now = time.monotonic()
         if section < 0:
@@ -229,14 +270,44 @@ class MainWindow(QWidget):
             self._dwell_note_id = NOTE_MAP.get(labels[section % len(labels)], 0); return
         self.dwell_progress = min(1.0, (now - self.dwell_started_at) / self.dwell_duration)
         if self.dwell_progress >= 1.0:
-            if time.monotonic() - self._last_note_change < 1.0: return
             self.selected_section = section; self._selected_note_id = self._dwell_note_id
             ch_id = self._id_for_note(self._dwell_note_id)
             if ch_id:
-                led = self.catalogue[ch_id].get("LED_effect", 0)
+                pattern = self.catalogue[ch_id]
+                fade_in = pattern.get("fade_in_ms", 100)
+                sustain = pattern.get("symbol_duration_ms", 500)
+                fade_out = pattern.get("fade_out_ms", 100)
+                total_lockout = fade_in + sustain + fade_out
+                
+                led = pattern.get("LED_effect", 0)
                 self.client.trigger(ch_id, self._dwell_note_id, led)
-                self._last_note_change = time.monotonic(); self._record_interaction()
+                
+                # Apply the Smart Lockout
+                self.is_input_locked = True
+                self._lockout_timer.start(total_lockout)
+                
+                self._last_note_change = now; self._record_interaction()
             self.dwell_progress = 0.0; self._dwell_armed = False
+
+    def trigger_shuffle(self):
+        if self.is_input_locked: return
+        
+        # Calculate total duration of all SHUFFLE_x steps
+        total_lockout = 0
+        for i in range(1, 100):
+            sid = f"SHUFFLE_{i}"
+            if sid in self.catalogue:
+                p = self.catalogue[sid]
+                total_lockout += p.get("fade_in_ms", 100) + p.get("symbol_duration_ms", 500) + p.get("fade_out_ms", 100)
+            else:
+                break
+        
+        if total_lockout > 0:
+            self.client.shuffle()
+            self.is_input_locked = True
+            self._lockout_timer.start(total_lockout)
+            self._record_interaction()
+            self.update()
 
     def _id_for_note(self, note_id):
         for name, entry in self.catalogue.items():
@@ -244,9 +315,13 @@ class MainWindow(QWidget):
         return None
 
     def _get_active_channels(self):
-        note_id = self._idle_note if self._idle_active else self._selected_note_id
+        id_ = self._idle_note if self._idle_active else self._rendered_chladni_id
+        if id_ in self.catalogue:
+            return self.catalogue[id_].get("hardware_config", {}).get("channels", [])
+        
+        # Fallback for note IDs (legacy)
         for entry in self.catalogue.values():
-            if entry.get("music_note") == note_id: return entry.get("hardware_config", {}).get("channels", [])
+            if entry.get("music_note") == id_: return entry.get("hardware_config", {}).get("channels", [])
         return []
 
     def using_image_mode(self): return (self.image_mode or self.blue_hand_closed or time.monotonic() < self.sharp_mode_until)
@@ -333,21 +408,41 @@ class MainWindow(QWidget):
 
     def _draw_selector(self, p, cx, cy, radius):
         glow_a = int(45 + 205 * self.wave_amplitude); colors = self.image_colors if self.using_image_mode() else self.section_colors
-        gc = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
-        grad = QRadialGradient(QPointF(cx, cy), radius + 70); grad.setColorAt(0.45, QColor(0,0,0,0)); grad.setColorAt(0.76, gc); grad.setColorAt(1.0, QColor(0,0,0,0))
-        p.setBrush(grad); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(cx, cy), radius + 70, radius + 70)
+        
+        # Draw glow if not locked
+        if not self.is_input_locked:
+            gc = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
+            grad = QRadialGradient(QPointF(cx, cy), radius + 70); grad.setColorAt(0.45, QColor(0,0,0,0)); grad.setColorAt(0.76, gc); grad.setColorAt(1.0, QColor(0,0,0,0))
+            p.setBrush(grad); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(cx, cy), radius + 70, radius + 70)
+        
         span = 60 * 16
         for i, color in enumerate(colors):
-            or_ = radius + 20 if i in (self.selected_section, self.hover_section) else radius
-            rect = QRectF(cx-or_, cy-or_, or_*2, or_*2); fill = QColor(color); fill.setAlpha(245 if i == self.selected_section else 195)
-            if i == self.hover_section: fill = fill.lighter(135)
+            is_sel = (i == self.selected_section)
+            is_hov = (i == self.hover_section and not self.is_input_locked)
+            or_ = radius + 20 if (is_sel or is_hov) else radius
+            rect = QRectF(cx-or_, cy-or_, or_*2, or_*2)
+            
+            if self.is_input_locked:
+                fill = QColor("#2a2a2c")
+            else:
+                fill = QColor(color)
+                fill.setAlpha(245 if is_sel else 195)
+                if is_hov: fill = fill.lighter(135)
+            
             p.setBrush(fill); p.setPen(Qt.NoPen); p.drawPie(rect, i*span, span)
+            
         p.setBrush(QColor("#1b1b1d")); p.setPen(QPen(QColor("#303035"), 4)); p.drawEllipse(QPointF(cx, cy), radius*0.72, radius*0.72)
-        labels = self.image_labels if self.using_image_mode() else self.sector_labels
-        p.setFont(QFont("Arial", 34, QFont.Bold))
-        for i in range(6):
-            a = math.radians(-(i*60 + 30)); tx, ty = cx + math.cos(a)*radius*0.86, cy + math.sin(a)*radius*0.86
-            p.setPen(QColor("#050505")); p.drawText(QRectF(tx-36, ty-28, 72, 56), Qt.AlignCenter, labels[i])
+        
+        if self.is_input_locked:
+            p.setPen(QColor("#ff0038"))
+            p.setFont(QFont("Arial", 16, QFont.Bold))
+            p.drawText(QRectF(cx-100, cy-20, 200, 40), Qt.AlignCenter, "SYSTEM BUSY")
+        else:
+            labels = self.image_labels if self.using_image_mode() else self.sector_labels
+            p.setFont(QFont("Arial", 34, QFont.Bold))
+            for i in range(6):
+                a = math.radians(-(i*60 + 30)); tx, ty = cx + math.cos(a)*radius*0.86, cy + math.sin(a)*radius*0.86
+                p.setPen(QColor("#050505")); p.drawText(QRectF(tx-36, ty-28, 72, 56), Qt.AlignCenter, labels[i])
 
     def _draw_dwell_ring(self, p, cx, cy, radius):
         if self.dwell_section < 0 or self.dwell_progress <= 0: return
@@ -457,6 +552,7 @@ class MainWindow(QWidget):
     def keyPressEvent(self, e):
         if e.key()==Qt.Key_I: self.testing_toggle.emit()
         elif e.key()==Qt.Key_M: self.settings_requested.emit()
+        elif e.key()==Qt.Key_S: self.trigger_shuffle()
         elif e.key()==Qt.Key_H: self._heartbeat_enabled = not self._heartbeat_enabled; self.heartbeat_toggled.emit(self._heartbeat_enabled)
         elif e.key()==Qt.Key_B: self._hints_visible = not self._hints_visible
         elif e.key()==Qt.Key_F: self.blue_hand_closed = True; self.sharp_mode_until = time.monotonic()+86400; self._record_interaction()

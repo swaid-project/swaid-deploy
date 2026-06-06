@@ -39,6 +39,7 @@ bool PureDataSender::init(const std::string& ip, int port) {
 void PureDataSender::sendNote(int note) {
     if (sockfd < 0) {
         ++m_sendErrors;
+        m_lastSendSuccess = false;
         std::cerr << "[PD] sendNote(" << note << ") failed — socket not ready\n";
         return;
     }
@@ -49,11 +50,13 @@ void PureDataSender::sendNote(int note) {
                           sizeof(servaddr));
     if (sent < 0) {
         ++m_sendErrors;
+        m_lastSendSuccess = false;
         std::cerr << "[PD] sendto failed — note=" << note
                   << " total_errors=" << m_sendErrors << "\n";
     } else {
         ++m_notesSent;
         m_lastNote = note;
+        m_lastSendSuccess = true;
         std::cout << "[PD] Note sent: " << note
                   << " (total=" << m_notesSent << ")\n";
     }
