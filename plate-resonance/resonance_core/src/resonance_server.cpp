@@ -22,6 +22,8 @@ PureDataSender pdMuteSender; // port 3001 — toggle mute/unmute (any message)
 
 // Global catalogue maps
 std::unordered_map<std::string, json> catalogue;
+std::unordered_map<int, std::string> musicNoteMap;
+std::mutex chladniMutex;
 
 // Global tracker for current note to prevent UI flickering
 static std::atomic<int> current_playing_note{-1};
@@ -96,7 +98,11 @@ json build_full_reply(const std::string& status) {
 
     // Active State (Piggybacking)
     r["active_state"]["current_note"] = current_playing_note.load();
-    r["active_state"]["current_chladni_id"] = current_active_chladni;
+    {
+        std::lock_guard<std::mutex> lock(chladniMutex);
+        r["active_state"]["current_chladni_id"] = current_active_chladni;
+    }
+    r["active_state"]["led_effect_id"] = ledDriver.getCurrentEffect();
     
     return r;
 }
@@ -126,6 +132,9 @@ void populateMaps(const std::string& file) {
             if (entry.contains("display_name")) {
                 std::string name = entry["display_name"].get<std::string>();
                 catalogue[name] = entry;
+                if (entry.contains("music_note")) {
+                    musicNoteMap[entry["music_note"].get<int>()] = name;
+                }
             } 
         }
     }
@@ -147,6 +156,10 @@ void jsonListenerThread() {
         std::cerr << "[PD] WARNING: mute sender init failed (port "
                   << systemConfig.pd_udp_mute_port << ") — mute control unavailable\n";
     }
+
+    // Ensure music is disabled on startup
+    pdMuteSender.sendNote(0);
+    musicMute.store(true);
 
     zmq::context_t context(1);
 	zmq::socket_t rep_socket(context, zmq::socket_type::rep);
@@ -190,7 +203,7 @@ void jsonListenerThread() {
                 masterMute.store(true);
                 if (!musicMute.load()) {
                     musicMute.store(true);
-                    pdMuteSender.sendNote(1);
+                    pdMuteSender.sendNote(0);
                 }
                 muteFromFailsafe = true;
             }
@@ -226,11 +239,7 @@ void jsonListenerThread() {
                     masterMute.store(false);
                     std::cout << "[Failsafe] Heartbeat restored. Unmuting transducers.\n";
                 }
-                if (musicMute.load()) {
-                    musicMute.store(false);
-                    pdMuteSender.sendNote(1);
-                    std::cout << "[Failsafe] Heartbeat restored. Unmuting music.\n";
-                }
+                // Music unmuting is deferred until the first trigger message
                 muteFromFailsafe = false;
             }
             std::string reply_str = build_full_reply("pong").dump();
@@ -270,7 +279,10 @@ void jsonListenerThread() {
                     applyPattern(catalogue, id);
                     
                     // Update diagnostics for the UI
-                    current_active_chladni = id;
+                    {
+                        std::lock_guard<std::mutex> lock(chladniMutex);
+                        current_active_chladni = id;
+                    }
                     if (pattern.contains("LED_effect")) {
                         ledQueue.push(pattern["LED_effect"].get<int>());
                     }
@@ -278,7 +290,10 @@ void jsonListenerThread() {
                     std::this_thread::sleep_for(std::chrono::milliseconds(total_ms));
                 }
 
-                current_active_chladni = "NONE";
+                {
+                    std::lock_guard<std::mutex> lock(chladniMutex);
+                    current_active_chladni = "NONE";
+                }
                 is_busy.store(false);
                 std::cout << "[Shuffle] Sequence complete.\n";
             }).detach();
@@ -294,30 +309,39 @@ void jsonListenerThread() {
                 continue;
             }
 
-            std::string chladni_id = message["chladni_id"].get<std::string>();
             int music_note = message["music_note"].get<int>();
-            int led_effect = message["led_effect_id"].get<int>();
 
-            int vol_l = 100;
-            int vol_r = 100;
-            if (message.contains("vol_l")) vol_l = message["vol_l"].get<int>();
-            if (message.contains("vol_r")) vol_r = message["vol_r"].get<int>();
+            if (musicNoteMap.find(music_note) == musicNoteMap.end()) {
+                rep_socket.send(zmq::str_buffer("{\"status\": \"error\", \"reason\": \"note_not_found\"}"), zmq::send_flags::none);
+                continue;
+            }
 
-            std::cout << "Trigger: " << chladni_id << " | Note: " << music_note << " | LED: " << led_effect 
-                      << " | Vol: [" << vol_l << ", " << vol_r << "]\n";
+            std::string chladni_id = musicNoteMap[music_note];
+            const auto& pattern = catalogue[chladni_id];
+            int led_effect = pattern.value("LED_effect", 0);
+
+            std::cout << "Trigger: Note: " << music_note << " -> " << chladni_id << " | LED: " << led_effect << "\n";
 
             // 1. Send note to external PureData process via UDP
-            if (!masterMute.load() && !musicMute.load()) {
+            if (musicMute.load()) {
+                musicMute.store(false);
+                pdMuteSender.sendNote(1); // Enable music
+                std::cout << "[PD] Music enabled via trigger.\n";
+            }
+            if (!masterMute.load()) {
                 pdSender.sendNote(music_note);
             }
 
             // 2. Immediate Hardware Dispatch
             ledQueue.push(led_effect);
-            applyPattern(catalogue, chladni_id, vol_l, vol_r);
+            applyPattern(catalogue, chladni_id);
 
             // 3. Update static state for UI feedback
             current_playing_note.store(music_note);
-            current_active_chladni = chladni_id;
+            {
+                std::lock_guard<std::mutex> lock(chladniMutex);
+                current_active_chladni = chladni_id;
+            }
 
             std::string reply_str = build_full_reply("ok").dump();
             std::cout << "[ZMQ Server TX] -> " << reply_str << "\n";

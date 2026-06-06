@@ -76,7 +76,7 @@ bool loadSystemConfig(const std::string& path) {
     }
 }
 
-void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int, int) {
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id) {
     auto it = catalogue.find(symbol_id);
     if (it == catalogue.end()) return;
 
@@ -114,18 +114,6 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
     }
 }
 
-void resetGenerators() {
-    for (auto& gen : generators) {
-        gen.freq.store(440.0f);
-        gen.targetAmp.store(0.0f);
-        gen.phaseDeg.store(0.0f);
-        gen.t_start.store(0);
-        gen.t_sustain.store(0);
-        gen.t_release.store(0);
-        gen.t_end.store(0);
-        gen.currentBasePhase = 0.0;
-    }
-}
 
 void generateSineWaves(float* outBuffer, unsigned long frames, int numOutChannels) {
     long long now = std::chrono::duration_cast<std::chrono::milliseconds>(

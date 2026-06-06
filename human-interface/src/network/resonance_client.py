@@ -125,16 +125,12 @@ class ResonanceClient:
 
     # --- Public API for the UI (Non-blocking) ---
 
-    def trigger(self, chladni_id: str, music_note: int, led_effect: int, vol_l: int = 100, vol_r: int = 100):
+    def trigger(self, music_note: int):
         """Enqueues a trigger command for the physical and musical state."""
         self._command_queue.put({
             "trace_id": f"req-{uuid.uuid4().hex[:8]}",
             "message_type": "trigger",
-            "chladni_id": str(chladni_id),
-            "music_note": int(music_note),
-            "led_effect_id": int(led_effect),
-            "vol_l": int(vol_l),
-            "vol_r": int(vol_r)
+            "music_note": int(music_note)
         })
 
     def shuffle(self):
@@ -144,47 +140,6 @@ class ResonanceClient:
             "message_type": "shuffle"
         })
 
-    def set_channel_state(self, transducer_mute: bool = None, music_mute: bool = None):
-        """Enqueues a mute/unmute command for specific audio logical groups."""
-        cmd = {}
-        if transducer_mute is not None:
-            cmd["transducer_mute"] = bool(transducer_mute)
-        if music_mute is not None:
-            cmd["music_mute"] = bool(music_mute)
-            
-        if cmd:
-            self._command_queue.put({
-                "trace_id": f"req-{uuid.uuid4().hex[:8]}",
-                "message_type": "channel_state",
-                "command": cmd
-            })
-
-    def manual_audio(self, channel: int, frequency_hz: float = None, amplitude: float = None, phase_deg: float = None):
-        """
-        Enqueues a manual audio generator override.
-        channel: 0-7 (physical transducer index)
-        """
-        cmd = {"channel": int(channel)}
-        if frequency_hz is not None:
-            cmd["frequency_hz"] = float(frequency_hz)
-        if amplitude is not None:
-            cmd["amplitude"] = float(amplitude)
-        if phase_deg is not None:
-            cmd["phase_deg"] = float(phase_deg)
-
-        self._command_queue.put({
-            "trace_id": f"req-{uuid.uuid4().hex[:8]}",
-            "message_type": "manual_audio",
-            "command": cmd
-        })
-
-    def manual_led(self, led_effect_id: int):
-        """Enqueues a manual LED effect override."""
-        self._command_queue.put({
-            "trace_id": f"req-{uuid.uuid4().hex[:8]}",
-            "message_type": "manual_led",
-            "command": {"led_effect": int(led_effect_id)}
-        })
 
     def stop(self):
         """Gracefully shuts down the background network thread."""

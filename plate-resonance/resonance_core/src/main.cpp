@@ -63,8 +63,8 @@ int main() {
             }
         }
 
-        // Sleep between health checks (20Hz = 50ms)
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        // Relaxed watchdog check: spec dictates 2-second interval, not 50ms
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         }
 
     // 3. Cleanup

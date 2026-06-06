@@ -77,10 +77,7 @@ bool loadSystemConfig(const std::string& path);
 int findAudioDeviceByName(const std::string& nameSubstr, int minChannels = 2);
 
 // --- Sending the pattern to the soundcard generators
-void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id, int vol_l = 100, int vol_r = 100);
-
-// --- Helper function to reset all generators
-void resetGenerators();
+void applyPattern(const std::unordered_map<std::string, json>& catalogue, const std::string& symbol_id);
 
 /**
  * @brief Dedicated callback for transducer output (USB Soundcard).

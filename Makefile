@@ -24,5 +24,4 @@ clean:
 # Shortcut to launch the system
 run:
 	@chmod +x swaid_launcher.sh
-	@chmod +x MusicSynthesis/OpenPureData.sh
 	@./swaid_launcher.sh

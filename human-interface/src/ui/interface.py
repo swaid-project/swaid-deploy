@@ -67,7 +67,7 @@ class MainWindow(QWidget):
         # 2. Sync & Diagnostics Timer (2Hz)
         self.sync_timer = QTimer(self)
         self.sync_timer.timeout.connect(self._sync_and_diagnostics_loop)
-        self.sync_timer.start(500)
+        self.sync_timer.start(100)
 
         self._symbol_images = {}
         self._preload_images()
@@ -279,8 +279,7 @@ class MainWindow(QWidget):
                 fade_out = pattern.get("fade_out_ms", 100)
                 total_lockout = fade_in + sustain + fade_out
                 
-                led = pattern.get("LED_effect", 0)
-                self.client.trigger(ch_id, self._dwell_note_id, led)
+                self.client.trigger(self._dwell_note_id)
                 
                 # Apply the Smart Lockout
                 self.is_input_locked = True
