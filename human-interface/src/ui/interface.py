@@ -153,8 +153,8 @@ class MainWindow(QWidget):
         self._active_warning_critical = False
 
     def _preload_status_icons(self):
-        icon_names = ["server"]
-        colors = {"green": "#00E800", "red": "#FF0038"}
+        icon_names = ["server", "fist", "openhand"]
+        colors = {"green": "#00E800", "red": "#FF0038", "white": "#FFFFFF"}
         for name in icon_names:
             self._status_icons[name] = {}
             path = get_resource_path(f"assets/{name}.svg")
@@ -425,6 +425,8 @@ class MainWindow(QWidget):
         base_r = min(w, h); sel_r = base_r * self.selector_radius_scale
         center_r = base_r * self.center_plate_radius_scale; preview_r = max(150, base_r * 0.15)
         
+        self._draw_actuation_ripple(p, cx, cy, sel_r)
+        
         self._draw_selector(p, cx, cy, sel_r)
         self._draw_center_plate(p, cx, cy, center_r)
         self._draw_dwell_ring(p, cx, cy, sel_r)
@@ -476,6 +478,59 @@ class MainWindow(QWidget):
             for off in dot_off:
                 mx = (self.t*68 + wi*36 + off)%length; my = baseline + math.sin(mx*wwk + speed + pph)*amp
                 p.drawEllipse(QPointF(x0 + mx, my), 6, 6)
+
+    def _draw_actuation_ripple(self, p, cx, cy, base_radius):
+        if self._rendered_chladni_id == "NONE":
+            return
+            
+        pattern = self.catalogue.get(self._rendered_chladni_id, {})
+        fi = pattern.get("fade_in_ms", 100)
+        du = pattern.get("symbol_duration_ms", 500)
+        fo = pattern.get("fade_out_ms", 100)
+        total_duration = (fi + du + fo) / 1000.0
+        
+        elapsed = time.monotonic() - self._pattern_start_time
+        
+        spawn_interval = 0.35
+        ripple_lifetime = 1.2
+        max_expansion = 700.0
+        
+        # Stop drawing if the last possible ripple has finished its lifetime
+        if elapsed < 0 or elapsed >= total_duration + ripple_lifetime:
+            return
+            
+        colors = self.image_colors if self.using_image_mode() else self.section_colors
+        base_col = QColor(colors[self.selected_section])
+        
+        p.save()
+        p.setBrush(Qt.NoBrush)
+        
+        for i in range(15):
+            t_start = i * spawn_interval
+            
+            # The time window determines if a ripple is allowed to SPAWN
+            if t_start >= total_duration:
+                break
+                
+            ripple_age = elapsed - t_start
+            if ripple_age < 0:
+                break
+                
+            # If the ripple has spawned and is still within its lifetime, let it propagate naturally
+            if ripple_age < ripple_lifetime:
+                t = ripple_age / ripple_lifetime
+                ease_out = 1.0 - math.pow(1.0 - t, 3)
+                current_radius = base_radius + 20 + (max_expansion * ease_out)
+                
+                # Individual fade out over the ripple's lifetime
+                alpha = int(255 * 0.40 * (1.0 - t))
+                
+                col = QColor(base_col)
+                col.setAlpha(alpha)
+                p.setPen(QPen(col, 2, Qt.SolidLine, Qt.RoundCap))
+                p.drawEllipse(QPointF(cx, cy), current_radius, current_radius)
+                
+        p.restore()
 
     def _draw_selector(self, p, cx, cy, radius):
         glow_a = int(90 + 165 * self.wave_amplitude); colors = self.image_colors if self.using_image_mode() else self.section_colors
@@ -582,21 +637,53 @@ class MainWindow(QWidget):
         self._draw_hand_skeleton(p, l_pts, QColor("#00eaff"), False)
         self._draw_hand_skeleton(p, r_pts, QColor("#ff3030"), False)
         p.setOpacity(1.0)
+        fist_icon = self._status_icons.get("fist", {}).get("white")
         p.setFont(QFont("Arial", 13, QFont.Bold)); p.setPen(QColor(0, 234, 255, alpha))
-        p.drawText(QRectF(w*0.14-90, cy+24, 180, 26), Qt.AlignCenter, "✊  CLOSE")
-        p.setPen(QColor(180, 240, 255, alpha)); p.drawText(QRectF(w*0.14-90, cy+52, 180, 26), Qt.AlignCenter, "✋  OPEN")
+        if fist_icon:
+            p.setOpacity(alpha / 255.0)
+            p.drawPixmap(w*0.14 - 44, cy+21, 32, 32, fist_icon)
+            p.setOpacity(1.0)
+            p.drawText(QRectF(w*0.14 - 8, cy+24, 100, 26), Qt.AlignLeft | Qt.AlignVCenter, "CLOSE")
+        else:
+            p.drawText(QRectF(w*0.14-90, cy+24, 180, 26), Qt.AlignCenter, "CLOSE")
+
+        openhand_icon = self._status_icons.get("openhand", {}).get("white")
+        p.setPen(QColor(180, 240, 255, alpha))
+        if openhand_icon:
+            p.setOpacity(alpha / 255.0)
+            p.drawPixmap(w*0.14 - 44, cy+49, 32, 32, openhand_icon)
+            p.setOpacity(1.0)
+            p.drawText(QRectF(w*0.14 - 8, cy+52, 100, 26), Qt.AlignLeft | Qt.AlignVCenter, "OPEN")
+        else:
+            p.drawText(QRectF(w*0.14-90, cy+52, 180, 26), Qt.AlignCenter, "OPEN")
+
         p.setPen(QColor(255, 80, 80, alpha)); p.drawText(QRectF(w*0.86-110, cy+24, 220, 26), Qt.AlignCenter, "MOVE INTO A NOTE")
         p.setPen(QColor(0, 217, 232, alpha)); p.setFont(QFont("Arial", 15, QFont.Bold))
         p.drawText(QRectF(cx-340, cy+center_r+75, 680, 100), Qt.AlignCenter, "COME TRY!  SELECT A MUSIC NOTE")
 
     def _draw_hints(self, p, w, h):
-        hb_label = "HB On" if self._heartbeat_enabled else "HB Off"
-        hints = [("[M]", "Câmeras"), ("[I]", "Diagnósticos"), ("[F]", "♯ Modo"), ("[H]", hb_label)]
-        kf, lf = QFont("Arial", 11, QFont.Bold), QFont("Arial", 11); gap = 18; hy = h - 22; fm = p.fontMetrics()
-        tw = sum(fm.horizontalAdvance(k)+fm.horizontalAdvance("  "+l) for k,l in hints) + gap*(len(hints)-1); hx = (w-tw)/2
+        hints = [("[M]", "Câmeras"), ("[I]", "Diagnósticos"), ("[F]", "♯ Modo")]
+        kf, lf = QFont("Arial", 11, QFont.Bold), QFont("Arial", 11); gap = 18; hy = h - 22
+        
+        tw = 0
+        widths = []
         for k, l in hints:
-            p.setFont(kf); p.setPen(QColor("#00d9e8")); p.drawText(QRectF(hx, hy-14, fm.horizontalAdvance(k), 18), Qt.AlignLeft, k); hx += fm.horizontalAdvance(k)
-            p.setFont(lf); p.setPen(QColor("#3a4a5a")); p.drawText(QRectF(hx, hy-14, fm.horizontalAdvance("  "+l), 18), Qt.AlignLeft, "  "+l); hx += fm.horizontalAdvance("  "+l)+gap
+            p.setFont(kf); kw = p.fontMetrics().horizontalAdvance(k)
+            p.setFont(lf); lw = p.fontMetrics().horizontalAdvance("  "+l)
+            widths.append((kw, lw))
+            tw += kw + lw
+        tw += gap * (len(hints) - 1)
+        
+        hx = (w - tw) / 2
+        for i, (k, l) in enumerate(hints):
+            kw, lw = widths[i]
+            p.setFont(kf); p.setPen(QColor("#00d9e8"))
+            p.drawText(QRectF(hx, hy-14, kw, 18), Qt.AlignLeft, k)
+            hx += kw
+            
+            p.setFont(lf); p.setPen(QColor("#3a4a5a"))
+            p.drawText(QRectF(hx, hy-14, lw, 18), Qt.AlignLeft, "  "+l)
+            hx += lw + gap
 
     def _draw_ambient_warning(self, p, w, h):
         msg = getattr(self, '_active_warning_msg', "")
