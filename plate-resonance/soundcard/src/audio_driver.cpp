@@ -61,6 +61,12 @@ bool loadSystemConfig(const std::string& path) {
             systemConfig.routing.logical_to_physical_transducer[logical] = value.get<int>();
         }
 
+        if (j.contains("hardware_enable")) {
+            systemConfig.enable_soundcard = j["hardware_enable"].value("soundcard", true);
+            systemConfig.enable_pico_serial = j["hardware_enable"].value("pico_serial", true);
+            systemConfig.enable_puredata_udp = j["hardware_enable"].value("puredata_udp", true);
+        }
+
         systemConfig.zmq_endpoint  = j["communication"]["zmq_endpoint"];
         systemConfig.pico_baud_rate = j["communication"]["pico_baud_rate"];
         systemConfig.pd_udp_port      = j["communication"].value("pd_udp_port", 3000);

@@ -27,9 +27,9 @@ def load_master_symbols():
     global master_symbols
     try:
         # Expected to be run from human-interface directory
-        path = "../master_symbols.json"
+        path = "../json_config/master_symbols.json"
         if not os.path.exists(path):
-            path = "master_symbols.json" # Fallback if run from root
+            path = "json_config/master_symbols.json" # Fallback if run from root
             
         with open(path, "r") as f:
             symbols = json.load(f)

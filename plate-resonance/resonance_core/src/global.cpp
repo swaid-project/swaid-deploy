@@ -6,7 +6,7 @@
 std::atomic<bool> jsonLive{false};
 
 // --- ZeroMQ instantiation
-const char* CATALOGUE_PATH = "../master_symbols.json";   
+const char* CATALOGUE_PATH = "../json_config/master_symbols.json";   
 const char* ZMQ_ENDPOINT   = "ipc:///tmp/swaid.sock";
 
 // --- Soundcard instantiation

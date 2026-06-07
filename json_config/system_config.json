@@ -1,4 +1,9 @@
 {
+    "hardware_enable": {
+        "soundcard": false,
+        "pico_serial": false,
+        "puredata_udp": true
+    },
     "audio_routing": {
         "sample_rate": 48000,
         "transducer_device_name": "ICUSBAUDIO7D",

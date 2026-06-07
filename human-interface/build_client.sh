@@ -26,7 +26,7 @@ pyinstaller --noconfirm --onedir --windowed --name "SWAID_Interface" \
     --add-data "assets:assets" \
     --add-data "models:models" \
     --add-data "src/ui:ui" \
-    --add-data "../master_symbols.json:." \
+    --add-data "../json_config/master_symbols.json:." \
     --add-data "../dictionary:dictionary" \
     --collect-all mediapipe \
     --collect-all cv2 \

@@ -46,6 +46,13 @@ void hardwareWorkerThread() {
     std::optional<int> pendingRetry;
     std::cout << "[Hardware Worker] Thread started.\n";
     while (hardwareWorkerRunning.load()) {
+        if (!systemConfig.enable_pico_serial) {
+            diag_pico_serial.store(1);
+            ledQueue.pop(); // Drain queue to prevent memory leak
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
         auto effectId = pendingRetry.has_value() ? pendingRetry : ledQueue.pop();
         pendingRetry = std::nullopt;
 
@@ -92,7 +99,7 @@ json build_full_reply(const std::string& status) {
     // Diagnostics (1 = Healthy/Active, 0 = Error/Muted)
     r["diagnostics"]["pico_serial"]     = diag_pico_serial.load();
     r["diagnostics"]["usb_audio"]       = diag_usb_audio.load();
-    r["diagnostics"]["UDP_connection"]   = pdSender.isReady() ? 1 : 0;
+    r["diagnostics"]["UDP_connection"]   = (!systemConfig.enable_puredata_udp || pdSender.isReady()) ? 1 : 0;
     r["diagnostics"]["music_state"]      = musicMute.load() ? 0 : 1;
     r["diagnostics"]["transducer_state"] = masterMute.load() ? 0 : 1;
 
@@ -148,17 +155,19 @@ void jsonListenerThread() {
     }
 
     // Initialize PureData UDP senders
-    if (!pdSender.init("127.0.0.1", systemConfig.pd_udp_port)) {
-        std::cerr << "[PD] WARNING: note sender init failed (port "
-                  << systemConfig.pd_udp_port << ") — music will be silent\n";
-    }
-    if (!pdMuteSender.init("127.0.0.1", systemConfig.pd_udp_mute_port)) {
-        std::cerr << "[PD] WARNING: mute sender init failed (port "
-                  << systemConfig.pd_udp_mute_port << ") — mute control unavailable\n";
-    }
+    if (systemConfig.enable_puredata_udp) {
+        if (!pdSender.init("127.0.0.1", systemConfig.pd_udp_port)) {
+            std::cerr << "[PD] WARNING: note sender init failed (port "
+                      << systemConfig.pd_udp_port << ") — music will be silent\n";
+        }
+        if (!pdMuteSender.init("127.0.0.1", systemConfig.pd_udp_mute_port)) {
+            std::cerr << "[PD] WARNING: mute sender init failed (port "
+                      << systemConfig.pd_udp_mute_port << ") — mute control unavailable\n";
+        }
 
-    // Ensure music is disabled on startup
-    pdMuteSender.sendNote(0);
+        // Ensure music is disabled on startup
+        pdMuteSender.sendNote(0);
+    }
     musicMute.store(true);
 
     zmq::context_t context(1);
@@ -203,7 +212,7 @@ void jsonListenerThread() {
                 masterMute.store(true);
                 if (!musicMute.load()) {
                     musicMute.store(true);
-                    pdMuteSender.sendNote(0);
+                    if (systemConfig.enable_puredata_udp) pdMuteSender.sendNote(0);
                 }
                 muteFromFailsafe = true;
             }
@@ -325,11 +334,11 @@ void jsonListenerThread() {
             // 1. Send note to external PureData process via UDP
             if (musicMute.load()) {
                 musicMute.store(false);
-                pdMuteSender.sendNote(1); // Enable music
+                if (systemConfig.enable_puredata_udp) pdMuteSender.sendNote(1); // Enable music
                 std::cout << "[PD] Music enabled via trigger.\n";
             }
             if (!masterMute.load()) {
-                pdSender.sendNote(music_note);
+                if (systemConfig.enable_puredata_udp) pdSender.sendNote(music_note);
             }
 
             // 2. Immediate Hardware Dispatch
@@ -376,7 +385,7 @@ void jsonListenerThread() {
                 bool mute = message["command"]["music_mute"].get<bool>();
                 musicMute.store(mute);
                 // Toggle PD's internal mute gate (any message flips state; PD starts unmuted)
-                pdMuteSender.sendNote(1);
+                if (systemConfig.enable_puredata_udp) pdMuteSender.sendNote(1);
                 std::cout << "[PD] Mute toggle sent → PD music now "
                           << (mute ? "MUTED" : "UNMUTED") << "\n";
             }

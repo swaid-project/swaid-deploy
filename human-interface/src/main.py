@@ -17,6 +17,10 @@ from ui.settings import CameraSettingsDialog
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / relative_path
+    
+    if relative_path == "master_symbols.json":
+        return Path(__file__).parent.parent.parent / "json_config" / relative_path
+        
     return Path(__file__).parent.parent / relative_path
 
 def load_catalogue():

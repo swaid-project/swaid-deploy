@@ -19,7 +19,7 @@ int main() {
     bool setupAudioStreams(PaStream** t_stream, PaStream** m_stream);
 
     // 1. Load System Configuration
-    if (!loadSystemConfig("../system_config.json")) {
+    if (!loadSystemConfig("../json_config/system_config.json")) {
         std::cerr << "FATAL: Could not load system_config.json\n";
         return 1;
     }
@@ -38,29 +38,33 @@ int main() {
     PaStream *m_stream = nullptr;
 
     while (jsonLive.load()) {
-        // Check if PortAudio needs initialization or if streams died
-        bool t_active = t_stream && (Pa_IsStreamActive(t_stream) == 1);
-        bool m_active = (!m_stream) || (Pa_IsStreamActive(m_stream) == 1); // m_stream might be null in combined mode
+        if (systemConfig.enable_soundcard) {
+            // Check if PortAudio needs initialization or if streams died
+            bool t_active = t_stream && (Pa_IsStreamActive(t_stream) == 1);
+            bool m_active = (!m_stream) || (Pa_IsStreamActive(m_stream) == 1); // m_stream might be null in combined mode
 
-        if (!t_active || !m_active) {
-            std::cerr << "[Watchdog] Audio failure detected or initial boot. Rebuilding context...\n";
-            
-            // Cleanup existing
-            if (t_stream) { Pa_StopStream(t_stream); Pa_CloseStream(t_stream); t_stream = nullptr; }
-            if (m_stream) { Pa_StopStream(m_stream); Pa_CloseStream(m_stream); m_stream = nullptr; }
-            Pa_Terminate();
-            diag_usb_audio.store(0);
+            if (!t_active || !m_active) {
+                std::cerr << "[Watchdog] Audio failure detected or initial boot. Rebuilding context...\n";
+                
+                // Cleanup existing
+                if (t_stream) { Pa_StopStream(t_stream); Pa_CloseStream(t_stream); t_stream = nullptr; }
+                if (m_stream) { Pa_StopStream(m_stream); Pa_CloseStream(m_stream); m_stream = nullptr; }
+                Pa_Terminate();
+                diag_usb_audio.store(0);
 
-            // Re-Initialize
-            Pa_Initialize();
-            if (setupAudioStreams(&t_stream, &m_stream)) {
-                std::cout << "[Watchdog] Audio restored successfully.\n";
-                diag_usb_audio.store(1);
-            } else {
-                std::cerr << "[Watchdog] Discovery failed. Retrying in 5 seconds...\n";
-                std::this_thread::sleep_for(std::chrono::seconds(5));
-                continue; // Try again
+                // Re-Initialize
+                Pa_Initialize();
+                if (setupAudioStreams(&t_stream, &m_stream)) {
+                    std::cout << "[Watchdog] Audio restored successfully.\n";
+                    diag_usb_audio.store(1);
+                } else {
+                    std::cerr << "[Watchdog] Discovery failed. Retrying in 5 seconds...\n";
+                    std::this_thread::sleep_for(std::chrono::seconds(5));
+                    continue; // Try again
+                }
             }
+        } else {
+            diag_usb_audio.store(1); // Auto-mock healthy state
         }
 
         // Relaxed watchdog check: spec dictates 2-second interval, not 50ms

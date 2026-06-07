@@ -40,6 +40,9 @@ struct AudioRouting {
 };
 
 struct SystemConfig {
+    bool enable_soundcard{true};
+    bool enable_pico_serial{true};
+    bool enable_puredata_udp{true};
     AudioRouting routing;
     std::string zmq_endpoint;
     int pico_baud_rate;
