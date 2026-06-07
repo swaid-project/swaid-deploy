@@ -99,7 +99,7 @@ void applyPattern(const std::unordered_map<std::string, json>& catalogue, const 
     if (pattern.contains("hardware_config") && pattern["hardware_config"].contains("channels")) {
         for (const auto& t : pattern["hardware_config"]["channels"]) {
             int logical = t.contains("logical_transducer") ? t["logical_transducer"].get<int>() : -1;
-            if (logical == -1 && t.contains("channel")) logical = t["channel"].get<int>();
+            if (logical == -1 && t.contains("output")) logical = t["output"].get<int>();
 
             if (systemConfig.routing.logical_to_physical_transducer.count(logical)) {
                 int physical = systemConfig.routing.logical_to_physical_transducer[logical];
