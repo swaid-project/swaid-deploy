@@ -9,7 +9,7 @@ from PIL import Image
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (QColor, QFont, QImage, QPainter, QPainterPath,
-                          QPen, QPixmap, QRadialGradient, QPolygonF)
+                          QPen, QPixmap, QRadialGradient, QPolygonF, QLinearGradient)
 from PySide6.QtWidgets import QWidget
 
 from ui.dashboard import WarningBanner
@@ -71,7 +71,15 @@ class MainWindow(QWidget):
 
         self._symbol_images = {}
         self._preload_images()
+        self._status_icons = {}
+        self._preload_status_icons()
         self._logo = self._load_logo()
+
+        self.sys_server_ok = False
+        self.sys_music_ok = False
+        self.sys_plate_ok = False
+        self.sys_led_ok = False
+        self.server_ping_alpha = 255.0
 
         # State tracking
         self._rendered_chladni_id = "NONE"
@@ -141,9 +149,28 @@ class MainWindow(QWidget):
         self._chladni_cache = {}
 
     def _init_ui_components(self):
-        self.warning_banner = WarningBanner(self)
-        self.warning_banner.move(0, 0)
-        self.warning_banner.setFixedWidth(self.width())
+        self._active_warning_msg = ""
+        self._active_warning_critical = False
+
+    def _preload_status_icons(self):
+        icon_names = ["server"]
+        colors = {"green": "#00E800", "red": "#FF0038"}
+        for name in icon_names:
+            self._status_icons[name] = {}
+            path = get_resource_path(f"assets/{name}.svg")
+            if not path.exists():
+                continue
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    svg_content = f.read()
+                
+                for state, color in colors.items():
+                    mod_svg = svg_content.replace("#1C274C", color).replace("#000000", color)
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(mod_svg.encode('utf-8'))
+                    if not pixmap.isNull():
+                        self._status_icons[name][state] = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            except Exception: pass
 
     def _preload_images(self):
         for name, entry in self.catalogue.items():
@@ -184,18 +211,28 @@ class MainWindow(QWidget):
         self._camera_error = msg
 
     def _sync_and_diagnostics_loop(self):
-        if not self.client.is_connected:
-            self.warning_banner.show_warning("CRITICAL: C++ Core Offline. Please restart the system.", critical=True)
+        self.sys_server_ok = self.client.is_connected
+        if self.sys_server_ok:
+            self.server_ping_alpha = 255.0
+            
+        self.sys_plate_ok = self.client.diagnostics.get("usb_audio", 0) != 0
+        self.sys_led_ok = self.client.diagnostics.get("pico_serial", 0) != 0
+        self.sys_music_ok = self.client.diagnostics.get("UDP_connection", 0) != 0
+
+        if not self.sys_server_ok:
+            self._active_warning_msg = "CRITICAL: Core Server Offline. Please restart the system."
+            self._active_warning_critical = True
         elif self._camera_error:
-            self.warning_banner.show_warning(self._camera_error, critical=True)
+            self._active_warning_msg = self._camera_error
+            self._active_warning_critical = True
         else:
             disconnected = []
-            if self.client.diagnostics.get("usb_audio") == 0:
+            if not self.sys_plate_ok:
                 disconnected.append("USB Soundcard")
-            if self.client.diagnostics.get("pico_serial") == 0:
+            if not self.sys_led_ok:
                 disconnected.append("LED Controller")
                 
-            pd_offline = (self.client.diagnostics.get("UDP_connection") == 0)
+            pd_offline = not self.sys_music_ok
             
             if disconnected or pd_offline:
                 parts = []
@@ -214,9 +251,10 @@ class MainWindow(QWidget):
                 elif pd_offline:
                     msg += " Sound may be limited."
                     
-                self.warning_banner.show_warning(msg, critical=False)
+                self._active_warning_msg = msg
+                self._active_warning_critical = False
             else:
-                self.warning_banner.hide_warning()
+                self._active_warning_msg = ""
 
         server_active_id = self.client.active_state.get("current_chladni_id", "NONE")
         if server_active_id != self._rendered_chladni_id:
@@ -255,6 +293,8 @@ class MainWindow(QWidget):
         if self._anim_last_time == 0.0: self._anim_last_time = now
         dt = min(now - self._anim_last_time, 0.05)
         self._anim_last_time = now
+        
+        self.server_ping_alpha = max(100.0, self.server_ping_alpha - (dt * 1500.0))
         
         self.wave_amplitude = self._calculate_visual_envelope()
         
@@ -380,6 +420,8 @@ class MainWindow(QWidget):
         p.save(); p.translate(cx, cy); p.rotate(30)
         self._draw_wave(p, -1000, 0, 2000, channels); p.restore()
         
+        self._draw_ambient_warning(p, w, h)
+        
         base_r = min(w, h); sel_r = base_r * self.selector_radius_scale
         center_r = base_r * self.center_plate_radius_scale; preview_r = max(150, base_r * 0.15)
         
@@ -391,7 +433,6 @@ class MainWindow(QWidget):
         self._draw_preview_disc(p, px, py, preview_r)
         
         self._draw_hands(p)
-        self._draw_image_button(p, w - 104, 16)
         
         if self._standby_active: self._draw_standby_overlay(p, cx, cy, center_r)
         
@@ -408,6 +449,7 @@ class MainWindow(QWidget):
         
         if self._hints_visible: self._draw_hints(p, w, h)
         self._draw_heartbeat_indicator(p, w)
+        self._draw_image_button(p, w - 104, 16)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
         wave_count = 4; spacing = 44; speed = self.t * 4.0;
@@ -556,12 +598,51 @@ class MainWindow(QWidget):
             p.setFont(kf); p.setPen(QColor("#00d9e8")); p.drawText(QRectF(hx, hy-14, fm.horizontalAdvance(k), 18), Qt.AlignLeft, k); hx += fm.horizontalAdvance(k)
             p.setFont(lf); p.setPen(QColor("#3a4a5a")); p.drawText(QRectF(hx, hy-14, fm.horizontalAdvance("  "+l), 18), Qt.AlignLeft, "  "+l); hx += fm.horizontalAdvance("  "+l)+gap
 
+    def _draw_ambient_warning(self, p, w, h):
+        msg = getattr(self, '_active_warning_msg', "")
+        if not msg: return
+        
+        critical = getattr(self, '_active_warning_critical', False)
+        base_color = QColor("#ff0038") if critical else QColor("#ff8500")
+        
+        p.save()
+        p.setPen(Qt.NoPen)
+        grad = QLinearGradient(0, 0, w, 0)
+        
+        c_edge = QColor(base_color.red(), base_color.green(), base_color.blue(), 0)
+        c_mid = QColor(base_color.red(), base_color.green(), base_color.blue(), 180)
+        
+        grad.setColorAt(0.0, c_edge)
+        grad.setColorAt(0.2, c_mid)
+        grad.setColorAt(0.8, c_mid)
+        grad.setColorAt(1.0, c_edge)
+        
+        p.setBrush(grad)
+        p.drawRect(0, 0, w, 60)
+        
+        p.setPen(Qt.white)
+        p.setFont(QFont("Arial", 12, QFont.Bold))
+        p.drawText(QRectF(0, 0, w, 60), Qt.AlignCenter, msg)
+        p.restore()
+
     def _draw_heartbeat_indicator(self, p, w):
         if not self._heartbeat_enabled: return
-        if self.client.is_connected: pulse = 0.45+0.55*abs(math.sin(self.t*1.9)); col = QColor(0,255,37,int(210*pulse)); lbl = "HB OK"
-        else: col = QColor("#ff0038"); lbl = "HB FAIL"
-        dx, dy = w-168.0, 8.0; p.setBrush(col); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(dx, dy), 4, 4)
-        p.setPen(col); p.setFont(QFont("Arial", 9, QFont.Bold)); p.drawText(QRectF(dx+10, dy-7, 150, 15), Qt.AlignLeft|Qt.AlignVCenter, lbl)
+        
+        start_y = 96
+        start_x = w - 76
+        
+        is_ok = self.sys_server_ok
+        state_key = "green" if is_ok else "red"
+        icon = self._status_icons.get("server", {}).get(state_key)
+        
+        if icon:
+            if is_ok:
+                p.setOpacity(self.server_ping_alpha / 255.0)
+            else:
+                p.setOpacity(1.0)
+            p.drawPixmap(start_x, start_y, 32, 32, icon)
+            
+        p.setOpacity(1.0)
 
     def _draw_image_button(self, p, x, y):
         self.image_btn_rect = QRectF(x, y, 88, 64); base = QColor("#1d8dbf") if self.using_image_mode() else QColor("#24252b")
@@ -596,5 +677,4 @@ class MainWindow(QWidget):
         if e.button()==Qt.LeftButton and self.image_btn_rect.contains(e.position()): self.image_mode = not self.image_mode; self._record_interaction(); self.update()
     def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self.update(); super().leaveEvent(e)
     def resizeEvent(self, e):
-        if hasattr(self, 'warning_banner'): self.warning_banner.setFixedWidth(self.width())
         super().resizeEvent(e)
