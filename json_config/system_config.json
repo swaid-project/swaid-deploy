@@ -1,7 +1,7 @@
 {
     "hardware_enable": {
-        "soundcard": false,
-        "pico_serial": false,
+        "soundcard": true,
+        "pico_serial": true,
         "puredata_udp": true
     },
     "audio_routing": {
