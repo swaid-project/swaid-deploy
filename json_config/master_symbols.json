@@ -8,10 +8,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -27,10 +27,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 293.5, "amplitude": 0.0133, "phase_deg": 180 },
-                { "output": 2, "frequency_hz": 293.5, "amplitude": 0.0133, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 293.5, "amplitude": 0.0133, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 293.5, "amplitude": 0.0133, "phase_deg": 180 }
+                { "output": 1, "frequency_hz": 293.5, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 2, "frequency_hz": 293.5, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 293.5, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 293.5, "amplitude": 0.2, "phase_deg": 180 }
             ]
         },
         "ui_metadata": {
@@ -46,10 +46,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 422.2, "amplitude": 0.0211, "phase_deg": 180 },
-                { "output": 2, "frequency_hz": 422.2, "amplitude": 0.0211, "phase_deg": 180 },
-                { "output": 3, "frequency_hz": 422.2, "amplitude": 0.0211, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 422.2, "amplitude": 0.0211, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 422.2, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 2, "frequency_hz": 422.2, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 422.2, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 422.2, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -65,10 +65,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 448.7, "amplitude": 0.0654, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 448.7, "amplitude": 0.0654, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 448.7, "amplitude": 0.0654, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 448.7, "amplitude": 0.0654, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 448.7, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 448.7, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 448.7, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 448.7, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -84,10 +84,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 525.1, "amplitude": 0.0155, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 525.1, "amplitude": 0.0155, "phase_deg": 180 },
-                { "output": 3, "frequency_hz": 525.1, "amplitude": 0.0155, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 525.1, "amplitude": 0.0155, "phase_deg": 180 }
+                { "output": 1, "frequency_hz": 525.1, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 525.1, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 525.1, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 525.1, "amplitude": 0.2, "phase_deg": 180 }
             ]
         },
         "ui_metadata": {
@@ -103,10 +103,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 654.5, "amplitude": 0.0681, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 654.5, "amplitude": 0.0681, "phase_deg": 180 },
-                { "output": 3, "frequency_hz": 654.5, "amplitude": 0.0681, "phase_deg": 180 },
-                { "output": 4, "frequency_hz": 654.5, "amplitude": 0.0681, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 654.5, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 654.5, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 654.5, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 654.5, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -122,10 +122,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 681.8, "amplitude": 0.0642, "phase_deg": 180 },
-                { "output": 2, "frequency_hz": 681.8, "amplitude": 0.0642, "phase_deg": 180 },
-                { "output": 3, "frequency_hz": 681.8, "amplitude": 0.0642, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 681.8, "amplitude": 0.0642, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 681.8, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 2, "frequency_hz": 681.8, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 681.8, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 681.8, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -141,10 +141,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 776.2, "amplitude": 0.1318, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 776.2, "amplitude": 0.1318, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 776.2, "amplitude": 0.1318, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 776.2, "amplitude": 0.1318, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 776.2, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 776.2, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 776.2, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 776.2, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -160,10 +160,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 874.3, "amplitude": 0.0952, "phase_deg": 180 },
-                { "output": 2, "frequency_hz": 874.3, "amplitude": 0.0952, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 874.3, "amplitude": 0.0952, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 874.3, "amplitude": 0.0952, "phase_deg": 180 }
+                { "output": 1, "frequency_hz": 874.3, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 2, "frequency_hz": 874.3, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 874.3, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 874.3, "amplitude": 0.2, "phase_deg": 180 }
             ]
         },
         "ui_metadata": {
@@ -179,10 +179,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 883.2, "amplitude": 0.0583, "phase_deg": 180 },
-                { "output": 2, "frequency_hz": 883.2, "amplitude": 0.0583, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 883.2, "amplitude": 0.0583, "phase_deg": 180 },
-                { "output": 4, "frequency_hz": 883.2, "amplitude": 0.0583, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 883.2, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 2, "frequency_hz": 883.2, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 883.2, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 883.2, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -198,10 +198,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 963.0, "amplitude": 0.2103, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 963.0, "amplitude": 0.2103, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 963.0, "amplitude": 0.2103, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 963.0, "amplitude": 0.2103, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 963.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 963.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 963.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 963.0, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -217,10 +217,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 1159.9, "amplitude": 0.0661, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 1159.9, "amplitude": 0.0661, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 1159.9, "amplitude": 0.0661, "phase_deg": 180 },
-                { "output": 4, "frequency_hz": 1159.9, "amplitude": 0.0661, "phase_deg": 180 }
+                { "output": 1, "frequency_hz": 1159.9, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 1159.9, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 1159.9, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 1159.9, "amplitude": 0.2, "phase_deg": 180 }
             ]
         },
         "ui_metadata": {
@@ -236,10 +236,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 120.0, "amplitude": 1.0, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 125.0, "amplitude": 1.0, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 130.0, "amplitude": 1.0, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 135.0, "amplitude": 1.0, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 120.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 125.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 130.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 135.0, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -255,10 +255,10 @@
         "fade_out_ms": 100,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 200.0, "amplitude": 1.0, "phase_deg": 180 },
-                { "output": 2, "frequency_hz": 210.0, "amplitude": 1.0, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 220.0, "amplitude": 1.0, "phase_deg": 180 },
-                { "output": 4, "frequency_hz": 230.0, "amplitude": 1.0, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 200.0, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 2, "frequency_hz": 210.0, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 220.0, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 230.0, "amplitude": 0.2, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
