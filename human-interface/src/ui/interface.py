@@ -143,7 +143,7 @@ class MainWindow(QWidget):
     def _init_ui_components(self):
         self.warning_banner = WarningBanner(self)
         self.warning_banner.move(0, 0)
-        self.warning_banner.setFixedWidth(1280)
+        self.warning_banner.setFixedWidth(self.width())
 
     def _preload_images(self):
         for name, entry in self.catalogue.items():
@@ -188,19 +188,42 @@ class MainWindow(QWidget):
             self.warning_banner.show_warning("CRITICAL: C++ Core Offline. Please restart the system.", critical=True)
         elif self._camera_error:
             self.warning_banner.show_warning(self._camera_error, critical=True)
-        elif self.client.diagnostics.get("usb_audio") == 0:
-            self.warning_banner.show_warning("WARNING: USB Soundcard disconnected. System attempting auto-recovery...", critical=False)
-        elif self.client.diagnostics.get("pico_serial") == 0:
-            self.warning_banner.show_warning("WARNING: LED Controller disconnected. System attempting auto-recovery...", critical=False)
-        elif self.client.diagnostics.get("UDP_connection") == 0:
-            self.warning_banner.show_warning("WARNING: PureData music link offline. Sound may be limited.", critical=False)
         else:
-            self.warning_banner.hide_warning()
+            disconnected = []
+            if self.client.diagnostics.get("usb_audio") == 0:
+                disconnected.append("USB Soundcard")
+            if self.client.diagnostics.get("pico_serial") == 0:
+                disconnected.append("LED Controller")
+                
+            pd_offline = (self.client.diagnostics.get("UDP_connection") == 0)
+            
+            if disconnected or pd_offline:
+                parts = []
+                if disconnected:
+                    if len(disconnected) == 1:
+                        parts.append(f"{disconnected[0]} disconnected")
+                    else:
+                        parts.append(f"{' and '.join(disconnected)} disconnected")
+                
+                if pd_offline:
+                    parts.append("PureData music link offline")
+                    
+                msg = "WARNING: " + ". ".join(parts) + "."
+                if disconnected:
+                    msg += " System attempting auto-recovery..."
+                elif pd_offline:
+                    msg += " Sound may be limited."
+                    
+                self.warning_banner.show_warning(msg, critical=False)
+            else:
+                self.warning_banner.hide_warning()
 
         server_active_id = self.client.active_state.get("current_chladni_id", "NONE")
         if server_active_id != self._rendered_chladni_id:
             self._rendered_chladni_id = server_active_id
             self._pattern_start_time = time.monotonic()
+            if server_active_id != "NONE":
+                self._last_played_chladni_id = server_active_id
             if server_active_id in self.catalogue:
                 pattern = self.catalogue[server_active_id]
                 self._selected_note_id = pattern.get("music_note", 0)
@@ -235,9 +258,8 @@ class MainWindow(QWidget):
         
         self.wave_amplitude = self._calculate_visual_envelope()
         
-        # Increment wave time only when vibrating
-        if self.wave_amplitude > 0:
-            self.t += dt * 3.0
+        # Always animate waves
+        self.t += dt * 3.0
         
         channels = self._get_active_channels()
         if channels: 
@@ -315,6 +337,10 @@ class MainWindow(QWidget):
 
     def _get_active_channels(self):
         id_ = self._idle_note if self._idle_active else self._rendered_chladni_id
+        
+        if id_ == "NONE" and not self._idle_active:
+            id_ = getattr(self, '_last_played_chladni_id', "NONE")
+
         if id_ in self.catalogue:
             return self.catalogue[id_].get("hardware_config", {}).get("channels", [])
         
@@ -384,14 +410,18 @@ class MainWindow(QWidget):
         self._draw_heartbeat_indicator(p, w)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
-        wave_count = 4; spacing = 44; speed = self.t * 4.0; base_amp = 20 + 15 * self.wave_amplitude
+        wave_count = 4; spacing = 44; speed = self.t * 4.0;
         colors = [QColor("#ff3a9e"), QColor("#cde70b"), QColor("#00eaff"), QColor("#ff8500")]
-        if channels and len(channels) >= wave_count:
-            raw_amps = [ch["amplitude"] for ch in channels[:wave_count]]
+        if channels:
+            base_amp = 35
+            padded_channels = [channels[i % len(channels)] for i in range(wave_count)]
+            raw_amps = [ch.get("amplitude", 1.0) for ch in padded_channels]
             max_a = max(raw_amps) or 1.0; amps = [a/max_a for a in raw_amps]
-            wk = [0.025 + 0.06*(ch["frequency_hz"]/500.0) for ch in channels[:wave_count]]
-            ph = [math.radians(ch["phase_deg"]) for ch in channels[:wave_count]]
-        else: amps = [1.0]*4; wk = [0.055]*4; ph = [0, 1.57, 3.14, 4.71]
+            wk = [0.025 + 0.06*(ch.get("frequency_hz", 200)/500.0) for ch in padded_channels]
+            ph = [math.radians(ch.get("phase_deg", 0)) + (math.pi/2 if i >= len(channels) else 0) for i, ch in enumerate(padded_channels)]
+        else: 
+            base_amp = 20 + 15 * self.wave_amplitude
+            amps = [1.0]*4; wk = [0.055]*4; ph = [0, 1.57, 3.14, 4.71]
         for wi in range(wave_count):
             baseline = y0 + (wi - 1.5) * spacing; amp, pph, wwk, col = base_amp * amps[wi], ph[wi], wk[wi], colors[wi]
             pts = [QPointF(x0 + x, baseline + math.sin(x*wwk + speed + pph)*amp) for x in range(0, length, _WAVE_STEP_BG)]
@@ -406,13 +436,13 @@ class MainWindow(QWidget):
                 p.drawEllipse(QPointF(x0 + mx, my), 6, 6)
 
     def _draw_selector(self, p, cx, cy, radius):
-        glow_a = int(45 + 205 * self.wave_amplitude); colors = self.image_colors if self.using_image_mode() else self.section_colors
+        glow_a = int(90 + 165 * self.wave_amplitude); colors = self.image_colors if self.using_image_mode() else self.section_colors
         
         # Draw glow if not locked
         if not self.is_input_locked:
             gc = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
-            grad = QRadialGradient(QPointF(cx, cy), radius + 70); grad.setColorAt(0.45, QColor(0,0,0,0)); grad.setColorAt(0.76, gc); grad.setColorAt(1.0, QColor(0,0,0,0))
-            p.setBrush(grad); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(cx, cy), radius + 70, radius + 70)
+            grad = QRadialGradient(QPointF(cx, cy), radius + 110); grad.setColorAt(0.40, QColor(0,0,0,0)); grad.setColorAt(0.70, gc); grad.setColorAt(1.0, QColor(0,0,0,0))
+            p.setBrush(grad); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(cx, cy), radius + 110, radius + 110)
         
         span = 60 * 16
         for i, color in enumerate(colors):
@@ -421,10 +451,11 @@ class MainWindow(QWidget):
             or_ = radius + 20 if (is_sel or is_hov) else radius
             rect = QRectF(cx-or_, cy-or_, or_*2, or_*2)
             
+            fill = QColor(color)
             if self.is_input_locked:
-                fill = QColor("#2a2a2c")
+                pulse_alpha = 110 + int(70 * math.sin(time.monotonic() * 6.0 - i * 1.047))
+                fill.setAlpha(pulse_alpha)
             else:
-                fill = QColor(color)
                 fill.setAlpha(245 if is_sel else 195)
                 if is_hov: fill = fill.lighter(135)
             
@@ -465,8 +496,9 @@ class MainWindow(QWidget):
         if img: p.drawImage(target, img, self.cover_source_rect(img.width(), img.height()))
         else: self._draw_chladni_contours_engine(p, cx, cy, inner_r)
         p.restore()
-        p.setPen(QPen(QColor("#7c4a1f"), max(1, int(radius*0.012))))
-        for r in (0.32, 0.58, 0.82): p.drawEllipse(QPointF(cx, cy), radius*r, radius*r)
+        if not img:
+            p.setPen(QPen(QColor("#7c4a1f"), max(1, int(radius*0.012))))
+            for r in (0.32, 0.58, 0.82): p.drawEllipse(QPointF(cx, cy), radius*r, radius*r)
 
     def _draw_chladni_contours_engine(self, p, cx, cy, radius):
         n = 4 + self.selected_section%3; m = 6 + (self.selected_section+1)%4; scale = math.pi/radius; step = max(3, int(radius/34))
@@ -563,3 +595,6 @@ class MainWindow(QWidget):
     def mousePressEvent(self, e):
         if e.button()==Qt.LeftButton and self.image_btn_rect.contains(e.position()): self.image_mode = not self.image_mode; self._record_interaction(); self.update()
     def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self.update(); super().leaveEvent(e)
+    def resizeEvent(self, e):
+        if hasattr(self, 'warning_banner'): self.warning_banner.setFixedWidth(self.width())
+        super().resizeEvent(e)
