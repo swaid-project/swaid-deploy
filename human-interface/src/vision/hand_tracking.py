@@ -31,11 +31,8 @@ DETECTION_HEIGHT = 920
 DETECTION_INTERVAL_MS = 33
 RESULT_HOLD_MS = 350
 OPTICAL_FLOW_HOLD_MS = 1200
-
 TRACKING_FPS = 20
-HAND_SMOOTHING_ALPHA = 0.75
-CURSOR_SMOOTHING_ALPHA = 1.0
-TRACKING_HOLD_SECONDS = 0.45
+
 LEFT_HAND_CLOSE_HOLD_SECONDS = 0.45
 
 LIVE_FOOTAGE_FPS = 20
@@ -132,19 +129,6 @@ def letterbox_for_detection(frame):
     det_frame[oy:oy+rh, ox:ox+rw] = resized
     return det_frame, {"offset_x": ox, "offset_y": oy, "width": rw, "height": rh}
 
-_CLAHE = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
-
-def preprocess_for_hand_detection(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    mean_l = float(gray.mean())
-    if mean_l > 155: a, b = 0.92, -16
-    elif mean_l < 85: a, b = 1.10, 16
-    else: a, b = 1.0, 0
-    balanced = cv2.convertScaleAbs(image, alpha=a, beta=b) if (a != 1.0 or b != 0) else image
-    lab = cv2.cvtColor(balanced, cv2.COLOR_BGR2LAB)
-    l, aa, bb = cv2.split(lab)
-    l = _CLAHE.apply(l)
-    return cv2.cvtColor(cv2.merge((l, aa, bb)), cv2.COLOR_LAB2BGR)
 
 def normalized_landmark_points(landmarks, mapping):
     pts = []
@@ -247,8 +231,7 @@ class HandTrackingThread(QThread):
                 ts_ms = int(time.monotonic() * 1000)
                 if ts_ms - last_det_ts >= DETECTION_INTERVAL_MS:
                     det_frame, mapping = letterbox_for_detection(frame)
-                    processed = preprocess_for_hand_detection(det_frame)
-                    mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(processed, cv2.COLOR_BGR2RGB))
+                    mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(det_frame, cv2.COLOR_BGR2RGB))
                     landmarker.detect_async(mp_img, ts_ms)
                     last_det_ts = ts_ms
 

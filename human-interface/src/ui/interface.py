@@ -25,12 +25,9 @@ NOTE_MAP = {
     "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
 }
 IDLE_TIMEOUT_S = 5 * 60
-CYCLE_INTERVAL_S = 60
 _STANDBY_TIMEOUT_S = 5 * 60
-_TOTAL_NOTES = 12
 
 _WAVE_STEP_BG = 3
-_WAVE_STEP_CIRCLE = 3
 
 _GHOST_HAND_PTS = (
     ( 0.00,  0.00), (-0.30, -0.20), (-0.50, -0.38), (-0.63, -0.52), (-0.70, -0.63),
@@ -598,11 +595,21 @@ class MainWindow(QWidget):
             for r in (0.32, 0.58, 0.82): p.drawEllipse(QPointF(cx, cy), radius*r, radius*r)
 
     def _draw_chladni_contours_engine(self, p, cx, cy, radius):
+        cache_key = (self.selected_section, int(radius))
+        if cache_key in self._chladni_cache:
+            p.drawPixmap(cx - radius, cy - radius, self._chladni_cache[cache_key])
+            return
+
+        pixmap = QPixmap(int(radius * 2), int(radius * 2))
+        pixmap.fill(Qt.transparent)
+        px_p = QPainter(pixmap)
+        px_p.setRenderHint(QPainter.Antialiasing)
+
         n = 4 + self.selected_section%3; m = 6 + (self.selected_section+1)%4; scale = math.pi/radius; step = max(3, int(radius/34))
-        p.setPen(QPen(QColor("#2d1a0d"), max(2, int(radius*0.018)), Qt.SolidLine, Qt.RoundCap))
-        def val(x, y): dx, dy = x-cx, y-cy; return (math.sin(n*dx*scale)*math.sin(m*dy*scale) - math.sin(m*dx*scale)*math.sin(n*dy*scale))
-        def inside(x, y): return (x-cx)**2 + (y-cy)**2 <= radius**2
-        xs, xe = int(cx-radius), int(cx+radius); ys, ye = int(cy-radius), int(cy+radius)
+        px_p.setPen(QPen(QColor("#2d1a0d"), max(2, int(radius*0.018)), Qt.SolidLine, Qt.RoundCap))
+        def val(x, y): dx, dy = x-radius, y-radius; return (math.sin(n*dx*scale)*math.sin(m*dy*scale) - math.sin(m*dx*scale)*math.sin(n*dy*scale))
+        def inside(x, y): return (x-radius)**2 + (y-radius)**2 <= radius**2
+        xs, xe = 0, int(radius*2); ys, ye = 0, int(radius*2)
         for y in range(ys, ye, step):
             for x in range(xs, xe, step):
                 corners = [(x,y,val(x,y)), (x+step,y,val(x+step,y)), (x+step,y+step,val(x+step,y+step)), (x,y+step,val(x,y+step))]
@@ -613,7 +620,10 @@ class MainWindow(QWidget):
                     elif v1*v2 < 0:
                         t = abs(v1)/(abs(v1)+abs(v2)); px,py = x1+(x2-x1)*t, y1+(y2-y1)*t
                         if inside(px,py): crossings.append(QPointF(px,py))
-                if len(crossings)>=2: p.drawLine(crossings[0], crossings[1])
+                if len(crossings)>=2: px_p.drawLine(crossings[0], crossings[1])
+        px_p.end()
+        self._chladni_cache[cache_key] = pixmap
+        p.drawPixmap(cx - radius, cy - radius, pixmap)
 
     def _draw_hands(self, p):
         if self.left_hand: self._draw_hand_skeleton(p, self.left_hand, QColor("#00eaff"), self.blue_hand_closed)
@@ -764,4 +774,5 @@ class MainWindow(QWidget):
         if e.button()==Qt.LeftButton and self.image_btn_rect.contains(e.position()): self.image_mode = not self.image_mode; self._record_interaction(); self.update()
     def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self.update(); super().leaveEvent(e)
     def resizeEvent(self, e):
+        self._chladni_cache.clear()
         super().resizeEvent(e)
