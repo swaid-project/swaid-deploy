@@ -220,6 +220,17 @@ class HandTrackingThread(QThread):
                 self._cam_times.append(start)
                 frame = cv2.flip(frame, 1)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                # manual brightness and contrast adjustment 
+                # 'a' controls CONTRAST (1.0 is normal, 1.2 is 20% more)
+                # 'b' controls BRIGHTNESS (0 is normal, positive numbers make it brighter)
+                a = 1.0
+                b = 40  # higher (60, 80) if still too dark
+                
+                if a != 1.0 or b != 0:
+                    frame = cv2.convertScaleAbs(frame, alpha=a, beta=b)
+                
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
                 # Emit live feed
                 now = time.monotonic()
