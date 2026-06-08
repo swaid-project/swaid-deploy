@@ -1,0 +1,3 @@
+2026-06-08 09:52:43,512 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 09:52:45,080 - DEBUG - TX -> {"trace_id": "req-33e76b06", "message_type": "trigger", "music_note": 0}
+2026-06-08 09:52:51,587 - DEBUG - TX -> {"trace_id": "req-9e5b34d1", "message_type": "trigger", "music_note": 5}
