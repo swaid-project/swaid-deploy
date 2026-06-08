@@ -261,9 +261,12 @@ class HandTrackingThread(QThread):
                 if fresh:
                     sorted_lms = sorted(res.hand_landmarks, key=lambda h: sum(l.x for l in h)/len(h))
                     left = normalized_landmark_points(sorted_lms[0], mapping)
-                    if len(sorted_lms) >= 2: right = normalized_landmark_points(sorted_lms[-1], mapping)
+                    right = normalized_landmark_points(sorted_lms[-1], mapping) if len(sorted_lms) >= 2 else None
                     self.smoothed_l, self.smoothed_r = left, right
-                    self.last_l_at = self.last_r_at = time.monotonic()
+                    now_t = time.monotonic()
+                    self.last_l_at = now_t
+                    if right is not None:
+                        self.last_r_at = now_t
                 elif prev_gray is not None and (self.smoothed_l or self.smoothed_r):
                     if (time.monotonic() - max(self.last_l_at, self.last_r_at)) * 1000 <= OPTICAL_FLOW_HOLD_MS:
                         h, w = frame.shape[:2]

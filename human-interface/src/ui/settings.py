@@ -32,7 +32,7 @@ class CameraSettingsDialog(QDialog):
                  standby_callback=None,
                  diag_callback=None,  diag_active=False,
                  hb_callback=None,    hb_active=True,
-                 hints_callback=None, hints_active=True,
+                 hints_callback=None, hints_active=False,
                  parent=None):
         super().__init__(parent)
         self.setWindowTitle("SWAID — Settings")

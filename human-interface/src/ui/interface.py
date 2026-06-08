@@ -27,6 +27,8 @@ NOTE_MAP = {
 IDLE_TIMEOUT_S = 5 * 60
 CYCLE_INTERVAL_S = 60
 _STANDBY_TIMEOUT_S = 5 * 60
+_STANDBY_EXIT_HOLD_S = 5.0
+_SHUFFLE_STEP_DELAY_MS = 1800
 _TOTAL_NOTES = 12
 
 _WAVE_STEP_BG = 3
@@ -128,6 +130,7 @@ class MainWindow(QWidget):
 
         self._camera_error = ""
         self._idle_last_cycle = 0.0
+        self._standby_exit_hold_start = None
 
         self.selector_radius_scale = 0.39
         self.center_plate_radius_scale = 0.33
@@ -364,24 +367,29 @@ class MainWindow(QWidget):
 
     def trigger_shuffle(self):
         if self.is_input_locked: return
-        
-        # Calculate total duration of all SHUFFLE_x steps
-        total_lockout = 0
+
+        shuffle_steps = []
         for i in range(1, 100):
             sid = f"SHUFFLE_{i}"
             if sid in self.catalogue:
-                p = self.catalogue[sid]
-                total_lockout += p.get("fade_in_ms", 100) + p.get("symbol_duration_ms", 500) + p.get("fade_out_ms", 100)
+                shuffle_steps.append(self.catalogue[sid])
             else:
                 break
-        
-        if total_lockout > 0:
-            self.client.shuffle()
-            self.is_input_locked = True
-            self._shuffle_locked = True
-            self._lockout_timer.start(total_lockout)
-            self._record_interaction()
-            self.update()
+
+        if not shuffle_steps:
+            return
+
+        for i, step in enumerate(shuffle_steps):
+            note = step.get("music_note")
+            if note is not None:
+                QTimer.singleShot(i * _SHUFFLE_STEP_DELAY_MS, lambda n=note: self.client.trigger(n))
+
+        total_lockout = _SHUFFLE_STEP_DELAY_MS * len(shuffle_steps)
+        self.is_input_locked = True
+        self._shuffle_locked = True
+        self._lockout_timer.start(total_lockout)
+        self._record_interaction()
+        self.update()
 
     def _id_for_note(self, note_id):
         for name, entry in self.catalogue.items():
@@ -439,8 +447,8 @@ class MainWindow(QWidget):
             self._unlock_shuffle()
 
     def trigger_standby_test(self): self._enter_standby(); self.update()
-    def _enter_standby(self): self._standby_active = True
-    def _exit_standby(self): self._standby_active = False
+    def _enter_standby(self): self._standby_active = True; self._standby_exit_hold_start = None
+    def _exit_standby(self): self._standby_active = False; self._standby_exit_hold_start = None
 
     def paintEvent(self, event):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
@@ -450,8 +458,8 @@ class MainWindow(QWidget):
         note_id = self._idle_note if self._idle_active else self._selected_note_id
         channels = self._get_active_channels()
         
-        p.save(); p.translate(cx, cy); p.rotate(30)
-        self._draw_wave(p, -1000, 0, 2000, channels); p.restore()
+        p.save(); p.rotate(30)
+        self._draw_wave(p, 0, 0, int(math.hypot(w, h) * 1.5), channels); p.restore()
         
         self._draw_ambient_warning(p, w, h)
         
@@ -797,7 +805,19 @@ class MainWindow(QWidget):
         p.drawLine(QPointF(bx-8, by+20), QPointF(bx-18, by+10)); p.drawLine(QPointF(bx+8, by+20), QPointF(bx+18, by+10))
 
     def set_tracked_hands(self, left, right, closed, cursor):
-        if left or right: self._last_hand_at = time.monotonic(); self._exit_standby(); self._record_interaction()
+        now = time.monotonic()
+        if left or right:
+            self._last_hand_at = now
+            self._record_interaction()
+            if self._standby_active:
+                if self._standby_exit_hold_start is None:
+                    self._standby_exit_hold_start = now
+                elif now - self._standby_exit_hold_start >= _STANDBY_EXIT_HOLD_S:
+                    self._exit_standby()
+            else:
+                self._standby_exit_hold_start = None
+        else:
+            self._standby_exit_hold_start = None
         self.left_hand, self.right_hand, self.blue_hand_closed = left, right, closed
         if cursor:
             self.mouse_pos = cursor
@@ -805,7 +825,6 @@ class MainWindow(QWidget):
             self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos)
             over_shuffle = self._shuffle_btn_rect.contains(self.mouse_pos)
             self._shuffle_btn_hover = over_shuffle
-            now = time.monotonic()
             if over_shuffle and not self._shuffle_locked and not self.is_input_locked:
                 if self._shuffle_dwell_start is None:
                     self._shuffle_dwell_start = now

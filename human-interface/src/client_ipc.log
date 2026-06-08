@@ -14,3 +14,19 @@
 2026-06-08 10:50:48,183 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
 2026-06-08 10:51:17,595 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
 2026-06-08 10:55:07,369 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 11:07:58,255 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 11:16:34,207 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 11:16:35,751 - DEBUG - TX -> {"trace_id": "req-9aef6cea", "message_type": "trigger", "music_note": 0}
+2026-06-08 11:16:41,000 - DEBUG - TX -> {"trace_id": "req-240babdc", "message_type": "trigger", "music_note": 11}
+2026-06-08 11:23:56,237 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 11:23:57,814 - DEBUG - TX -> {"trace_id": "req-ea12a58c", "message_type": "trigger", "music_note": 0}
+2026-06-08 11:24:02,797 - DEBUG - TX -> {"trace_id": "req-7f7f42d2", "message_type": "shuffle"}
+2026-06-08 11:25:14,425 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 11:25:15,977 - DEBUG - TX -> {"trace_id": "req-79c6ec88", "message_type": "trigger", "music_note": 0}
+2026-06-08 11:25:26,840 - DEBUG - TX -> {"trace_id": "req-9dc4077d", "message_type": "trigger", "music_note": 0}
+2026-06-08 11:28:40,811 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-08 11:28:42,389 - DEBUG - TX -> {"trace_id": "req-7d2c6729", "message_type": "trigger", "music_note": 0}
+2026-06-08 11:28:47,671 - DEBUG - TX -> {"trace_id": "req-90abfccc", "message_type": "trigger", "music_note": 98}
+2026-06-08 11:28:49,521 - DEBUG - TX -> {"trace_id": "req-1486c926", "message_type": "trigger", "music_note": 99}
+2026-06-08 11:29:08,608 - DEBUG - TX -> {"trace_id": "req-6d4d0852", "message_type": "trigger", "music_note": 98}
+2026-06-08 11:29:10,432 - DEBUG - TX -> {"trace_id": "req-ba1fb2be", "message_type": "trigger", "music_note": 99}
