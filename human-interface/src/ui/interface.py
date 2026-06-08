@@ -154,13 +154,19 @@ class MainWindow(QWidget):
         self._shuffle_dwell_start = None
         self._shuffle_locked = False
         self._chladni_cache = {}
+        
+        self._gesture_dwell_state = {
+            "steeple": {"active": False, "start": 0.0, "armed": True},
+            "peace": {"active": False, "start": 0.0, "armed": True},
+            "ok_sign": {"active": False, "start": 0.0, "armed": True}
+        }
 
     def _init_ui_components(self):
         self._active_warning_msg = ""
         self._active_warning_critical = False
 
     def _preload_status_icons(self):
-        icon_names = ["server", "fist", "openhand"]
+        icon_names = ["server", "fist", "openhand", "ippe-vibrate"]
         colors = {"green": "#00E800", "red": "#FF0038", "white": "#FFFFFF"}
         for name in icon_names:
             self._status_icons[name] = {}
@@ -328,7 +334,8 @@ class MainWindow(QWidget):
         self.update()
 
     def update_dwell_selection(self):
-        if self._idle_active or self.is_input_locked: 
+        is_menu_lock = getattr(self, "diagnostics_open", False) or getattr(self, "camera_menu_open", False)
+        if self._idle_active or self.is_input_locked or is_menu_lock: 
             self.dwell_progress = 0.0
             return
         
@@ -379,12 +386,12 @@ class MainWindow(QWidget):
         if not shuffle_steps:
             return
 
-        for i, step in enumerate(shuffle_steps):
-            note = step.get("music_note")
-            if note is not None:
-                QTimer.singleShot(i * _SHUFFLE_STEP_DELAY_MS, lambda n=note: self.client.trigger(n))
+        total_lockout = 0
+        for step in shuffle_steps:
+            total_lockout += step.get("fade_in_ms", 100) + step.get("symbol_duration_ms", 500) + step.get("fade_out_ms", 100)
 
-        total_lockout = _SHUFFLE_STEP_DELAY_MS * len(shuffle_steps)
+        self.client.shuffle()
+
         self.is_input_locked = True
         self._shuffle_locked = True
         self._lockout_timer.start(total_lockout)
@@ -491,9 +498,9 @@ class MainWindow(QWidget):
             p.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
         
         if self._hints_visible: self._draw_hints(p, w, h)
+        self._draw_image_button(p, w - 104, 16)
+        self._draw_shuffle_button(p, w - 104, 96)
         self._draw_heartbeat_indicator(p, w)
-        self._draw_shuffle_button(p, w - 192, 16)
-        self._draw_image_button(p, w - 104, 152)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
         wave_count = 4; spacing = 44; speed = self.t * 4.0;
@@ -576,9 +583,11 @@ class MainWindow(QWidget):
 
     def _draw_selector(self, p, cx, cy, radius):
         glow_a = int(90 + 165 * self.wave_amplitude); colors = self.image_colors if self.using_image_mode() else self.section_colors
+        is_menu_lock = getattr(self, "diagnostics_open", False) or getattr(self, "camera_menu_open", False)
+        actual_locked = self.is_input_locked or is_menu_lock
         
         # Draw glow if not locked
-        if not self.is_input_locked:
+        if not actual_locked:
             gc = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
             grad = QRadialGradient(QPointF(cx, cy), radius + 110); grad.setColorAt(0.40, QColor(0,0,0,0)); grad.setColorAt(0.70, gc); grad.setColorAt(1.0, QColor(0,0,0,0))
             p.setBrush(grad); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(cx, cy), radius + 110, radius + 110)
@@ -586,12 +595,12 @@ class MainWindow(QWidget):
         span = 60 * 16
         for i, color in enumerate(colors):
             is_sel = (i == self.selected_section)
-            is_hov = (i == self.hover_section and not self.is_input_locked)
+            is_hov = (i == self.hover_section and not actual_locked)
             or_ = radius + 20 if (is_sel or is_hov) else radius
             rect = QRectF(cx-or_, cy-or_, or_*2, or_*2)
             
             fill = QColor(color)
-            if self.is_input_locked:
+            if actual_locked:
                 pulse_alpha = 110 + int(70 * math.sin(time.monotonic() * 6.0 - i * 1.047))
                 fill.setAlpha(pulse_alpha)
             else:
@@ -602,10 +611,11 @@ class MainWindow(QWidget):
             
         p.setBrush(QColor("#1b1b1d")); p.setPen(QPen(QColor("#303035"), 4)); p.drawEllipse(QPointF(cx, cy), radius*0.72, radius*0.72)
         
-        if self.is_input_locked:
-            p.setPen(QColor("#ff0038"))
+        if actual_locked:
+            p.setPen(QColor("#ff0038") if self.is_input_locked else QColor("#00d9e8"))
             p.setFont(QFont("Arial", 16, QFont.Bold))
-            p.drawText(QRectF(cx-100, cy-20, 200, 40), Qt.AlignCenter, "SYSTEM BUSY")
+            text = "SYSTEM BUSY" if self.is_input_locked else "MENU OPEN"
+            p.drawText(QRectF(cx-100, cy-20, 200, 40), Qt.AlignCenter, text)
         else:
             labels = self.image_labels if self.using_image_mode() else self.sector_labels
             p.setFont(QFont("Arial", 34, QFont.Bold))
@@ -771,7 +781,7 @@ class MainWindow(QWidget):
     def _draw_heartbeat_indicator(self, p, w):
         if not self._heartbeat_enabled: return
         
-        start_y = 96
+        start_y = 176
         start_x = w - 76
         
         is_ok = self.sys_server_ok
@@ -788,11 +798,14 @@ class MainWindow(QWidget):
         p.setOpacity(1.0)
 
     def _draw_shuffle_button(self, p, x, y):
-        self._shuffle_btn_rect = QRectF(x, y, 176, 128)
-        base = QColor("#2a1e4a") if not self._shuffle_btn_hover else QColor("#3d2e6e")
+        self._shuffle_btn_rect = QRectF(x, y, 88, 64)
+        base = QColor("#2a1e4a")
+        if self._shuffle_btn_hover: base = base.lighter(132)
         p.setBrush(base); p.setPen(QPen(QColor("#9b59f5"), 3)); p.drawRoundedRect(self._shuffle_btn_rect, 8, 8)
-        p.setPen(QColor("#d4b8ff")); p.setFont(QFont("Arial", 18, QFont.Bold))
-        p.drawText(self._shuffle_btn_rect, Qt.AlignCenter, "⟳  SHUFFLE")
+        
+        icon = self._status_icons.get("ippe-vibrate", {}).get("white")
+        if icon:
+            p.drawPixmap(int(x + 28), int(y + 16), 32, 32, icon)
 
     def _draw_image_button(self, p, x, y):
         self.image_btn_rect = QRectF(x, y, 88, 64); base = QColor("#1d8dbf") if self.using_image_mode() else QColor("#24252b")
@@ -804,7 +817,25 @@ class MainWindow(QWidget):
         for i in range(4): p.drawRoundedRect(QRectF(bx-22+i*11, self.image_btn_rect.top()+16, 10, 24), 5, 5)
         p.drawLine(QPointF(bx-8, by+20), QPointF(bx-18, by+10)); p.drawLine(QPointF(bx+8, by+20), QPointF(bx+18, by+10))
 
-    def set_tracked_hands(self, left, right, closed, cursor):
+    def _trigger_gesture_action(self, action):
+        diag_open = getattr(self, "diagnostics_open", False)
+        cam_open = getattr(self, "camera_menu_open", False)
+
+        if action == "steeple":
+            if self.is_input_locked or diag_open or cam_open: return
+            if not self._shuffle_locked:
+                self.trigger_shuffle()
+                self._shuffle_locked = True
+        elif action == "peace":
+            if self.is_input_locked or diag_open: return
+            self.camera_menu_open = not cam_open
+            self.settings_requested.emit()
+        elif action == "ok_sign":
+            if self.is_input_locked or cam_open: return
+            self.diagnostics_open = not diag_open
+            self.testing_toggle.emit()
+
+    def set_tracked_hands(self, left, right, closed, cursor, gestures=None):
         now = time.monotonic()
         if left or right:
             self._last_hand_at = now
@@ -837,19 +868,32 @@ class MainWindow(QWidget):
                 self._shuffle_dwell_start = None
         else:
             self._shuffle_dwell_start = None
+
+        if gestures:
+            for g_name, g_val in gestures.items():
+                st = self._gesture_dwell_state[g_name]
+                if g_val:
+                    if st["armed"]:
+                        if not st["active"]:
+                            st["active"] = True
+                            st["start"] = now
+                        elif now - st["start"] >= 0.8:
+                            st["armed"] = False
+                            st["active"] = False
+                            self._trigger_gesture_action(g_name)
+                else:
+                    st["active"] = False
+                    st["armed"] = True
+
         self.update()
 
     def set_center_live_image(self, img): self.center_live_image = img; self.update()
     def keyPressEvent(self, e):
-        if e.key()==Qt.Key_I: self.testing_toggle.emit()
-        elif e.key()==Qt.Key_M: self.settings_requested.emit()
-        elif e.key()==Qt.Key_S: self.trigger_shuffle()
+        if e.key()==Qt.Key_S: self.trigger_shuffle()
         elif e.key()==Qt.Key_H: self._heartbeat_enabled = not self._heartbeat_enabled; self.heartbeat_toggled.emit(self._heartbeat_enabled)
         elif e.key()==Qt.Key_B: self._hints_visible = not self._hints_visible
-        elif e.key()==Qt.Key_F: self.blue_hand_closed = True; self.sharp_mode_until = time.monotonic()+86400; self._record_interaction()
         super().keyPressEvent(e)
     def keyReleaseEvent(self, e):
-        if e.key()==Qt.Key_F: self.blue_hand_closed = False; self.sharp_mode_until = 0.0; self.update()
         super().keyReleaseEvent(e)
     def mouseMoveEvent(self, e): self.mouse_pos = QPointF(e.position()); self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos); self._shuffle_btn_hover = self._shuffle_btn_rect.contains(self.mouse_pos); self._record_interaction(); self.update()
     def mousePressEvent(self, e):

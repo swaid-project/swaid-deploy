@@ -164,8 +164,37 @@ def is_hand_closed_points(pts):
         if td > jd * 1.12: ext += 1
     return ext <= 1
 
+def is_peace_sign_points(pts):
+    if not pts or len(pts) != 21: return False
+    ext_idx = pts[8][1] < pts[6][1]
+    ext_mid = pts[12][1] < pts[10][1]
+    fold_rng = pts[16][1] > pts[14][1]
+    fold_pnk = pts[20][1] > pts[18][1]
+    return ext_idx and ext_mid and fold_rng and fold_pnk
+
+def is_ok_sign_points(pts):
+    if not pts or len(pts) != 21: return False
+    # Thumb tip (4) and Index tip (8) touching
+    thumb_idx_dist = ((pts[4][0] - pts[8][0])**2 + (pts[4][1] - pts[8][1])**2)**0.5
+    touching = thumb_idx_dist < 0.08
+    
+    # Middle, ring, pinky extended (tips above PIP)
+    ext_mid = pts[12][1] < pts[10][1]
+    ext_rng = pts[16][1] < pts[14][1]
+    ext_pnk = pts[20][1] < pts[18][1]
+    
+    return touching and ext_mid and ext_rng and ext_pnk
+
+def is_steeple_points(pts_l, pts_r):
+    if not pts_l or not pts_r or len(pts_l) != 21 or len(pts_r) != 21: return False
+    for i in (4, 8, 12, 16, 20):
+        dist = ((pts_l[i][0] - pts_r[i][0])**2 + (pts_l[i][1] - pts_r[i][1])**2)**0.5
+        if dist > 0.08:
+            return False
+    return True
+
 class HandTrackingThread(QThread):
-    hands_detected = Signal(object, object, bool, object, float)
+    hands_detected = Signal(object, object, bool, object, float, dict)
     camera_frame_ready = Signal(object)
     metrics_updated = Signal(dict)
     camera_error = Signal(str)
@@ -318,7 +347,13 @@ class HandTrackingThread(QThread):
                     closed = (time.monotonic() - self.l_closed_start >= LEFT_HAND_CLOSE_HOLD_SECONDS)
                 else: self.l_closed_start = None
 
-                self.hands_detected.emit(self.smoothed_l, self.smoothed_r, closed, cursor, start)
+                gestures = {"peace": False, "steeple": False, "ok_sign": False}
+                if self.smoothed_l and self.smoothed_r:
+                    gestures["peace"] = is_peace_sign_points(self.smoothed_l) and is_peace_sign_points(self.smoothed_r)
+                    gestures["steeple"] = is_steeple_points(self.smoothed_l, self.smoothed_r)
+                    gestures["ok_sign"] = is_ok_sign_points(self.smoothed_l) and is_ok_sign_points(self.smoothed_r)
+
+                self.hands_detected.emit(self.smoothed_l, self.smoothed_r, closed, cursor, start, gestures)
 
                 if now - self._last_metrics_emit >= 0.5:
                     self._last_metrics_emit = now

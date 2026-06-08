@@ -58,18 +58,22 @@ def main():
         "camera_fallback_tried": False,
     }
 
-    def on_hands_detected(left, right, closed, cursor_norm, frame_time):
+    def on_hands_detected(left, right, closed, cursor_norm, frame_time, gestures):
         w, h = window.width(), window.height()
         left_px = scale_points(left, w, h)
         right_px = scale_points(right, w, h)
         cursor_px = QPointF(cursor_norm[0] * w, cursor_norm[1] * h) if cursor_norm else None
         
-        window.set_tracked_hands(left_px, right_px, closed, cursor_px)
+        window.set_tracked_hands(left_px, right_px, closed, cursor_px, gestures)
         
         latency = (time.monotonic() - frame_time) * 1000
         overlay.update_stats({
             "camera_to_ui_ms": latency,
             "hands_visible": (1 if left else 0) + (1 if right else 0),
+            "sys_server_ok": window.sys_server_ok,
+            "sys_plate_ok": window.sys_plate_ok,
+            "sys_led_ok": window.sys_led_ok,
+            "sys_music_ok": window.sys_music_ok,
             **state["perf"]
         })
 
@@ -144,7 +148,7 @@ def main():
         dlg.show()
 
     window.settings_requested.connect(open_settings)
-    window.testing_toggle.connect(lambda: overlay.setVisible(not overlay.isVisible()))
+    window.testing_toggle.connect(overlay.toggle_visibility)
     
     start_tracker(state["tracking_camera"])
     window.showFullScreen()
