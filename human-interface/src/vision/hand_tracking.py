@@ -109,9 +109,25 @@ def open_camera(source):
             _add(str(dev))
 
     for c in candidates:
-        # Force CAP_FFMPEG: avoids GStreamer (which fails silently on UVC cameras)
-        # and avoids CAP_V4L2 (which corrupts kernel device state via VIDIOC_G_INPUT
-        # on cameras that don't support it, causing all subsequent opens to fail too).
+        # Try CAP_V4L2 first. CAP_FFMPEG conflicts with manual exposure configs via v4l2-ctl
+        # (producing 'Mau descritor de ficheiro' / EBADF crashes on open).
+        cap = cv2.VideoCapture(c, cv2.CAP_V4L2)
+        if cap.isOpened():
+            # Automatically apply UGREEN camera exposure fix via v4l2-ctl
+            if isinstance(c, str) and c.startswith("/dev/video"):
+                import subprocess
+                try:
+                    subprocess.run(["v4l2-ctl", "-d", c, "-c", "auto_exposure=1"], check=False, stderr=subprocess.DEVNULL)
+                    subprocess.run(["v4l2-ctl", "-d", c, "-c", "exposure_dynamic_framerate=0"], check=False, stderr=subprocess.DEVNULL)
+                    subprocess.run(["v4l2-ctl", "-d", c, "-c", "exposure_time_absolute=204"], check=False, stderr=subprocess.DEVNULL)
+                    subprocess.run(["v4l2-ctl", "-d", c, "-c", "contrast=0"], check=False, stderr=subprocess.DEVNULL)
+                    subprocess.run(["v4l2-ctl", "-d", c, "-c", "brightness=0"], check=False, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+            return cap
+        cap.release()
+
+        # Fallback to FFMPEG if V4L2 fails
         cap = cv2.VideoCapture(c, cv2.CAP_FFMPEG)
         if cap.isOpened():
             return cap
@@ -219,17 +235,6 @@ class HandTrackingThread(QThread):
 
                 self._cam_times.append(start)
                 frame = cv2.flip(frame, 1)
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-                # manual brightness and contrast adjustment 
-                # 'a' controls CONTRAST (1.0 is normal, 1.2 is 20% more)
-                # 'b' controls BRIGHTNESS (0 is normal, positive numbers make it brighter)
-                a = 1.0
-                b = 40  # higher (60, 80) if still too dark
-                
-                if a != 1.0 or b != 0:
-                    frame = cv2.convertScaleAbs(frame, alpha=a, beta=b)
-                
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
                 # Emit live feed

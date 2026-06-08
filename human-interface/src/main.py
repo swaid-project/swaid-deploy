@@ -141,7 +141,7 @@ def main():
     window.testing_toggle.connect(lambda: overlay.setVisible(not overlay.isVisible()))
     
     start_tracker(state["tracking_camera"])
-    window.show()
+    window.showFullScreen()
     
     try:
         exit_code = app.exec()
