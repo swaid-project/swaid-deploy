@@ -132,8 +132,8 @@ class MainWindow(QWidget):
         self.selector_radius_scale = 0.39
         self.center_plate_radius_scale = 0.33
         
-        self.sector_labels = ["E", "D", "C", "B", "A", "F"]
-        self.image_labels = ["D#", "F#", "G#", "A#", "G", "C#"]
+        self.sector_labels = ["E", "D", "C₄", "B", "A", "G"]
+        self.image_labels = ["F", "D#", "C#", "C₅", "A#", "G#"]
         
         self.section_colors = [
             QColor("#00d9e8"), QColor("#7d3c98"), QColor("#00ff25"),
