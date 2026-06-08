@@ -45,6 +45,9 @@ class MainWindow(QWidget):
     settings_requested = Signal()
     testing_toggle = Signal()
     heartbeat_toggled = Signal(bool)
+    tracking_camera_changed = Signal(str)
+    center_camera_changed = Signal(str)
+    exposure_changed = Signal(int)
 
     def __init__(self, client, catalogue):
         super().__init__()
@@ -160,6 +163,20 @@ class MainWindow(QWidget):
             "peace": {"active": False, "start": 0.0, "armed": True},
             "ok_sign": {"active": False, "start": 0.0, "armed": True}
         }
+        
+        try:
+            from vision.hand_tracking import discover_camera_choices
+            self.camera_choices = discover_camera_choices()
+        except ImportError:
+            self.camera_choices = []
+        if not self.camera_choices: self.camera_choices = [("Default", "/dev/video0")]
+        
+        self.track_cam_idx = 0
+        self.center_cam_idx = 0
+        self.calib_tgt_idx = 0
+        self.brightness_val = 0.42 # Approx 204 exposure
+        self._cam_menu_dwell_start = None
+        self._cam_menu_hovered_btn = -1
 
     def _init_ui_components(self):
         self._active_warning_msg = ""
@@ -168,6 +185,25 @@ class MainWindow(QWidget):
     def _preload_status_icons(self):
         icon_names = ["server", "fist", "openhand", "ippe-vibrate"]
         colors = {"green": "#00E800", "red": "#FF0038", "white": "#FFFFFF"}
+        bri_path = get_resource_path("assets/brightness.svg")
+        self._bri_icon = None
+        if bri_path.exists():
+            try:
+                with open(bri_path, 'r', encoding='utf-8') as f:
+                    svg_content = f.read()
+                # The SVG uses #0F0F0F for the icon paths
+                mod_svg = svg_content.replace("#0F0F0F", "#FFFFFF")
+                pixmap = QPixmap()
+                pixmap.loadFromData(mod_svg.encode('utf-8'))
+                if not pixmap.isNull():
+                    self._bri_icon = pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    print(f"[UI] Successfully loaded and colorized brightness.svg from {bri_path}")
+                else:
+                    print(f"[UI] Failed to load brightness.svg: QPixmap is null after parsing {bri_path}")
+            except Exception as e:
+                print(f"[UI] Exception loading brightness.svg: {e}")
+        else:
+            print(f"[UI] Could not find brightness.svg at {bri_path}")
         for name in icon_names:
             self._status_icons[name] = {}
             path = get_resource_path(f"assets/{name}.svg")
@@ -498,9 +534,68 @@ class MainWindow(QWidget):
             p.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
         
         if self._hints_visible: self._draw_hints(p, w, h)
+        
+        self._draw_camera_menu(p, w, h)
         self._draw_image_button(p, w - 104, 16)
         self._draw_shuffle_button(p, w - 104, 96)
         self._draw_heartbeat_indicator(p, w)
+
+    def _draw_camera_menu(self, p, w, h):
+        if not getattr(self, "camera_menu_open", False): return
+        
+        # Dim background
+        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
+        
+        # Right Side Menu
+        menu_w, menu_h = 350, 400
+        rx, ry = w - menu_w - 40, (h - menu_h) // 2
+        
+        opts = [
+            ("Tracking Camera", self.camera_choices[self.track_cam_idx][0]),
+            ("Center Camera", self.camera_choices[self.center_cam_idx][0]),
+            ("Calibrate Target", "Tracking Camera" if self.calib_tgt_idx == 0 else "Center Camera")
+        ]
+        
+        for i, (title, val) in enumerate(opts):
+            by = ry + i * 120
+            rect = QRectF(rx, by, menu_w, 100)
+            is_hov = rect.contains(self.mouse_pos) if self.mouse_pos else False
+            
+            p.setBrush(QColor(40, 40, 50, 240) if not is_hov else QColor(70, 70, 90, 240))
+            p.setPen(QPen(QColor("#00d9e8") if is_hov else Qt.white, 2))
+            p.drawRoundedRect(rect, 10, 10)
+            
+            p.setFont(QFont("Arial", 16, QFont.Bold))
+            p.setPen(QColor("#a0a0a0"))
+            p.drawText(QRectF(rx + 20, by + 10, menu_w - 40, 30), Qt.AlignLeft, title)
+            
+            p.setFont(QFont("Arial", 22, QFont.Bold))
+            p.setPen(Qt.white)
+            p.drawText(QRectF(rx + 20, by + 40, menu_w - 40, 50), Qt.AlignLeft, val)
+            
+            # Draw progress bar if dwelling
+            if is_hov and self._cam_menu_hovered_btn == i and self._cam_menu_dwell_start:
+                now = time.monotonic()
+                prog = min(1.0, (now - self._cam_menu_dwell_start) / 1.0)
+                if prog > 0:
+                    p.setBrush(QColor("#00d9e8"))
+                    p.setPen(Qt.NoPen)
+                    p.drawRoundedRect(QRectF(rx, by + 90, menu_w * prog, 10), 5, 5)
+            
+        # Left Side Slider
+        sx, sy = 80, (h - 400) // 2
+        p.setPen(QPen(QColor(40, 40, 50, 240), 10, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(sx, sy, sx, sy + 400)
+        
+        # Icon below the slide bar
+        if getattr(self, "_bri_icon", None):
+            p.drawPixmap(sx - 24, sy + 430, 48, 48, self._bri_icon)
+        
+        thumb_y = sy + int((1.0 - self.brightness_val) * 400)
+        
+        p.setBrush(QColor("#00d9e8"))
+        p.setPen(Qt.white)
+        p.drawEllipse(QPointF(sx, thumb_y), 30, 30)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
         wave_count = 4; spacing = 44; speed = self.t * 4.0;
@@ -829,7 +924,7 @@ class MainWindow(QWidget):
         elif action == "peace":
             if self.is_input_locked or diag_open: return
             self.camera_menu_open = not cam_open
-            self.settings_requested.emit()
+            # self.settings_requested.emit() # Replaced by native Phase 5 UI
         elif action == "ok_sign":
             if self.is_input_locked or cam_open: return
             self.diagnostics_open = not diag_open
@@ -868,6 +963,53 @@ class MainWindow(QWidget):
                 self._shuffle_dwell_start = None
         else:
             self._shuffle_dwell_start = None
+
+        if getattr(self, "camera_menu_open", False):
+            # Left slider logic
+            w, h = self.width(), self.height()
+            sy = (h - 400) // 2
+            if self.left_hand:
+                lx = self.left_hand[8].x()
+                ly = self.left_hand[8].y()
+                if lx < 300: # Hand is on the left third of the screen
+                    val = 1.0 - ((ly - sy) / 400.0)
+                    val = max(0.0, min(1.0, val))
+                    if abs(val - self.brightness_val) > 0.02:
+                        self.brightness_val = val
+                        exp = int(20 + val * 480)
+                        self.exposure_changed.emit(exp)
+            
+            # Right menu logic
+            if self.mouse_pos:
+                menu_w = 350
+                rx = w - menu_w - 40
+                ry = (h - 400) // 2
+                
+                hovered_now = -1
+                for i in range(3):
+                    by = ry + i * 120
+                    if QRectF(rx, by, menu_w, 100).contains(self.mouse_pos):
+                        hovered_now = i
+                        break
+                        
+                if hovered_now != -1:
+                    if self._cam_menu_hovered_btn != hovered_now:
+                        self._cam_menu_hovered_btn = hovered_now
+                        self._cam_menu_dwell_start = now
+                    elif self._cam_menu_dwell_start and (now - self._cam_menu_dwell_start >= 1.0):
+                        # Dwell triggered, cycle value
+                        if hovered_now == 0:
+                            self.track_cam_idx = (self.track_cam_idx + 1) % len(self.camera_choices)
+                            self.tracking_camera_changed.emit(self.camera_choices[self.track_cam_idx][1])
+                        elif hovered_now == 1:
+                            self.center_cam_idx = (self.center_cam_idx + 1) % len(self.camera_choices)
+                            self.center_camera_changed.emit(self.camera_choices[self.center_cam_idx][1])
+                        elif hovered_now == 2:
+                            self.calib_tgt_idx = 1 - self.calib_tgt_idx
+                        self._cam_menu_dwell_start = now + 0.5 # Add small delay before next cycle
+                else:
+                    self._cam_menu_hovered_btn = -1
+                    self._cam_menu_dwell_start = None
 
         if gestures:
             for g_name, g_val in gestures.items():

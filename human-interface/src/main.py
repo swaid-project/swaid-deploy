@@ -147,7 +147,16 @@ def main():
         state["settings_dialog"] = dlg
         dlg.show()
 
-    window.settings_requested.connect(open_settings)
+    # Phase 5 Native Camera Menu Connections
+    window.tracking_camera_changed.connect(lambda cam: start_tracker(cam))
+    window.center_camera_changed.connect(lambda cam: state.update({"center_camera": cam}))
+    
+    def on_exposure_changed(val):
+        state["exposure_time"] = val
+        if state["tracker"]:
+            state["tracker"].set_exposure(val)
+    window.exposure_changed.connect(on_exposure_changed)
+    
     window.testing_toggle.connect(overlay.toggle_visibility)
     
     start_tracker(state["tracking_camera"])
