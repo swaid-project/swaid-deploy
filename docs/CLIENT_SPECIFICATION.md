@@ -40,7 +40,8 @@ When `main.py` is executed (or the PyInstaller compiled binary is launched), the
 
 4. **GUI Instantiation (PySide6):**
 * Boots the Qt Event Loop.
-* Instantiates the Main Window, mapping the internal state variables to the UI canvases (Sinusoidal wave renderers and Symbol Image display).
+* Instantiates the Main Window (handled by `ui/interface.py`), mapping the internal state variables to the UI canvases (Sinusoidal wave renderers and Symbol Image display).
+* Instantiates the Diagnostic Dashboard widget (handled by `ui/dashboard.py`) to manage hardware feedback visually.
 * Starts the internal `QTimer` UI sync loops (10Hz).
 
 
@@ -56,12 +57,13 @@ To prevent this, `resonance_client.py` must be implemented using a **Thread-Safe
 ### 3.1. The Background ZMQ Thread
 
 * **The Loop:** An isolated background thread runs an infinite `while` loop at roughly 10Hz to 20Hz (every 50ms - 100ms).
-* **Command Ingestion:** It checks a thread-safe `queue.Queue()`.
-* If a command (e.g., `trigger`, `shuffle`) is in the queue, it pops it and sends it.
-* If the queue is empty, it generates a default `{"message_type": "ping"}` payload and sends it.
+* **Command Ingestion:** It checks a thread-safe `queue.Queue()` via `_command_queue.get_nowait()`.
+* If a command (e.g., `trigger`, `shuffle`) is in the queue, it pops it. The client adds a `trace_id` generated via `uuid.uuid4().hex[:8]` for tracing before sending.
+* If the queue is empty (a `queue.Empty` exception is caught), it generates a default `{"message_type": "ping"}` payload and sends it.
+* **Logging System:** A dedicated logger captures all non-ping IPC payloads and errors, saving them to `client_ipc.log` and broadcasting to the console for easier diagnostic tracing.
 
 
-* **Receive Timeout (`RCVTIMEO`):** The socket must be configured with a strict 200ms receive timeout. If the C++ Server crashes or is offline, `recv_json()` throws an exception (`zmq.error.Again`). The client catches this, closes/rebuilds the socket to prevent deadlock, and flags the connection as offline.
+* **Receive Timeout (`RCVTIMEO`):** The socket must be configured with a strict 200ms receive timeout (`zmq.RCVTIMEO` and `zmq.SNDTIMEO`), alongside `zmq.LINGER = 0`. If the C++ Server crashes or is offline, `recv_json()` throws an exception (`zmq.error.Again`). The client catches this, closes/rebuilds the socket to prevent deadlock, and flags the connection as offline.
 * **State Caching:** When a valid JSON reply is received from the server, the thread safely overwrites two class-level properties: `self.cached_diagnostics` and `self.cached_active_state`.
 
 ### 3.2. Public API Methods
@@ -70,7 +72,6 @@ The `ResonanceClient` class exposes simple, non-blocking methods for the UI to c
 
 * `client.trigger(music_note: int)`
 * `client.shuffle()`
-* `client.set_channel_state(transducer_mute: bool, music_mute: bool)`
 
 ---
 

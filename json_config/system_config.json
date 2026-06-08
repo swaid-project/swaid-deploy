@@ -19,5 +19,10 @@
         "pico_baud_rate": 9600,
         "pd_udp_port": 3000,
         "pd_udp_mute_port": 3001
+    },
+    "synchronization_offsets_ms": {
+        "puredata_udp": 0,
+        "pico_serial": 0,
+        "soundcard": 25
     }
 }

@@ -70,11 +70,11 @@ Fired when the Human-Interface detects a user gesture selecting a symbol.
 * `t_sustain = current_time + fade_in_ms`
 * `t_release = t_sustain + symbol_duration_ms`
 * `t_end = t_release + fade_out_ms`
-* The ultra-fast Audio Thread uses these atomic timestamps to seamlessly interpolate the transducer amplitudes on physical channels 5, 6, 7, and 8. It linearly ramps from 0 to `AMP_VALUE` until `t_sustain`, holds steady until `t_release`, and ramps down to 0 until `t_end`.
+* The ultra-fast Audio Thread uses these atomic timestamps (`t_start`, `t_sustain`, `t_release`, `t_end`) to seamlessly interpolate the transducer amplitudes on the assigned physical channels (mapped via `system_config.json`, e.g., 5, 6, 7, and 8). The `generateSineWaves` function continuously calculates the real-time amplitude. It linearly ramps from 0 to `AMP_VALUE` until `t_sustain`, holds steady until `t_release`, and ramps down to 0 until `t_end`. Phase increment is calculated per sample block to ensure continuous waveform phase (`currentBasePhase`) without popping.
 
 
 4. **LEDs:** Pushes the mapped `LED_effect` into a thread-safe Lock-Free Queue to be processed by the background Pico serial thread.
-5. **PureData (UDP 3000 & 3001):** Transmits the `music_note` payload via UDP to port 3000 to instruct PureData which musical sequence to generate. If `music_state` is currently `false` (disabled), the server sends an enable message ("1") to port 3001 to enable the music, and updates its internal `music_state` to `true`. Once enabled, the music remains enabled unless explicitly muted or a timeout occurs.
+5. **PureData (UDP 3000 & 3001):** Transmits the `music_note` payload via UDP to port 3000 (`pdSender`) to instruct PureData which musical sequence to generate. If `music_state` is currently `false` (disabled), the server sends an enable message ("1") to port 3001 (`pdMuteSender`) to enable the music, and updates its internal `music_state` to `true`. Once enabled, the music remains enabled unless explicitly muted or a timeout occurs.
 
 
 
@@ -118,32 +118,9 @@ Used to maintain the connection, keep the hardware alive, and synchronize UI sta
 
 
 
-### 3.4. Command: `channel_state`
+### 3.4. Standard Server Response (REP)
 
-Allows the UI to manually override and mute specific outputs.
-
-* **Client Request (REQ):**
-
-```json
-{
-  "message_type": "channel_state",
-  "command": {
-    "transducer_state": true,
-    "music_state": false
-  }
-}
-
-```
-
-* **Server Execution Sequence:**
-* **If `transducer_state` is `false` (0):** Instantly forces amplitudes on channels 5,6,7,8 to 0.0.
-* **If `music_state` is `false` (0):** Sends a disable message ("0") to UDP 3001 to disable PureData. Updates internal `music_state` to `false`.
-
-
-
-### 3.5. Standard Server Response (REP)
-
-Regardless of whether the request was `trigger`, `shuffle`, `ping`, or `channel_state`, the server **always** responds with this exact payload structure:
+Regardless of whether the request was `trigger`, `shuffle`, or `ping`, the server **always** responds with this exact payload structure:
 
 ```json
 {
@@ -188,8 +165,9 @@ To prevent the UDP network sends or the Pico Serial port from blocking the real-
 
 
 * **Thread 3: Hardware Worker (Pico Serial)**
-* Reads from a Lock-Free Queue.
-* Executes blocking `write()` operations (e.g., `"FX:1\n"`) to the `/dev/ttyACM*` file descriptor.
+* Reads from a thread-safe `LockFreeQueue<int> ledQueue`.
+* Handled by the `hardwareWorkerThread()`, it executes blocking `write()` operations (e.g., `"FX:1\n"`) to the `/dev/ttyACM*` file descriptor through the `EmbeddedSAL` interface.
+* If a write fails or connection drops, it enters a recovery mode, buffering the pending command, and attempts to reconnect.
 
 
 * **Thread 4: Main / Watchdog (Auto-Recovery)**
@@ -205,7 +183,7 @@ The system is designed to run unattended. If a cable is unplugged, the server mu
 
 ### 5.1. USB Soundcard Discovery (Watchdog)
 
-* **Initial Boot / Reconnection:** The Watchdog thread calls `Pa_GetDeviceInfo()` and iterates through all connected OS audio devices. It performs a substring match against the device name specified in `system_config.json`.
+* **Initial Boot / Reconnection:** The Watchdog thread calls `Pa_GetDeviceInfo()` and iterates through all connected OS audio devices. It performs a substring match against the device name specified in `system_config.json` (e.g. `ICUSBAUDIO7D`). It also validates that `info->maxOutputChannels` meets the required minimum channels; if channels return 0, it means the device is currently locked by another audio process (like PulseAudio or a zombie resonance server), logging a specific failure to the user.
 * **Health Check:** Every 2 seconds, the Watchdog calls `Pa_IsStreamActive()`.
 * **Failure State:** If the stream aborts (cable pulled), `diagnostics["usb_audio"]` is set to `0`. The Watchdog safely calls `Pa_Terminate()`, waits 5 seconds, and attempts the Discovery sequence again.
 
@@ -254,15 +232,35 @@ Each symbol object in the JSON array must strictly adhere to the following schem
     "fade_out_ms": 100,
     "hardware_config": {
         "channels": [
-            { "output": 1, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 },
-            { "output": 2, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 },
-            { "output": 3, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 },
-            { "output": 4, "frequency_hz": 190.5, "amplitude": 0.016, "phase_deg": 0 }
+            { "output": 1, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 },
+            { "output": 2, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 },
+            { "output": 3, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 },
+            { "output": 4, "frequency_hz": 190.5, "amplitude": 0.2, "phase_deg": 0 }
         ]
     },
     "ui_metadata": {
         "image_path": "./dictionary/CHLADNI_191.png"
     }
 }
-
 ```
+
+## Appendix B: Audiovisual Synchronization (Staggered Execution)
+
+To ensure perceptual tightness between the mechanical vibration, the LED flash, and the PureData audio synthesis, the server employs a **Timestamp-Based Staggered Execution**. 
+
+Because different external subsystems have inherently different dispatch latencies (e.g., localhost UDP is nearly instantaneous, while USB-Serial UART has OS polling lag), dispatching them "simultaneously" causes noticeable A/V desync (flamming).
+
+The server offsets execution delays per-peripheral to allow slower mediums to "catch up". These offsets are centrally managed in `system_config.json` allowing empirical calibration without recompilation:
+
+```json
+"synchronization_offsets_ms": {
+    "puredata_udp": 0,
+    "pico_serial": 0,
+    "soundcard": 25
+}
+```
+
+**Implementation Strategy:**
+1. **UDP / PureData:** Dispatched immediately (typically `+0ms` offset).
+2. **Serial / Pico:** Placed into the `ledQueue`. The hardware worker thread evaluates the offset duration before pushing the `write()` command over the USB bus.
+3. **PortAudio / Transducers:** The `t_start` timestamp variable for the DSP amplitude envelopes is pushed into the future by the specified offset. The real-time callback thread naturally waits for the system clock to cross `t_start` before moving amplitudes away from 0.0.
