@@ -87,8 +87,8 @@ class MainWindow(QWidget):
         self._last_hand_at = time.monotonic()
         self._idle_active = False
         self._idle_note = 0
-        self._standby_active = False
-        self._hints_visible = True
+        self._standby_active = True
+        self._hints_visible = False
         self._heartbeat_enabled = True
         
         self.is_input_locked = False
