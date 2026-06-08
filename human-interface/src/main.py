@@ -51,6 +51,7 @@ def main():
         "tracking_camera": default_camera_source(),
         "center_mode": "live",
         "center_camera": default_camera_source(),
+        "exposure_time": 204,
         "tracker": None,
         "settings_dialog": None,
         "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0},
@@ -120,9 +121,14 @@ def main():
                 start_tracker(vals["tracking_camera"])
             state["center_camera"] = vals["center_camera"]
             state["center_mode"] = vals["center_mode"]
+            if vals["exposure_time"] != state["exposure_time"]:
+                state["exposure_time"] = vals["exposure_time"]
+                if state["tracker"]:
+                    state["tracker"].set_exposure(vals["exposure_time"])
 
         dlg = CameraSettingsDialog(
             state["tracking_camera"], state["center_mode"], state["center_camera"],
+            exposure_time=state["exposure_time"],
             standby_callback=window.trigger_standby_test,
             diag_callback=lambda: window.testing_toggle.emit(),
             diag_active=overlay.isVisible(),

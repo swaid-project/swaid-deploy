@@ -817,7 +817,8 @@ class MainWindow(QWidget):
             else:
                 self._standby_exit_hold_start = None
         else:
-            self._standby_exit_hold_start = None
+            if self._standby_exit_hold_start is not None and (now - self._last_hand_at) > 1.0:
+                self._standby_exit_hold_start = None
         self.left_hand, self.right_hand, self.blue_hand_closed = left, right, closed
         if cursor:
             self.mouse_pos = cursor
