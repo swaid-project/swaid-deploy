@@ -25,7 +25,11 @@ NOTE_MAP = {
     "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
 }
 IDLE_TIMEOUT_S = 5 * 60
+CYCLE_INTERVAL_S = 60
 _STANDBY_TIMEOUT_S = 5 * 60
+_STANDBY_EXIT_HOLD_S = 5.0
+_SHUFFLE_STEP_DELAY_MS = 1800
+_TOTAL_NOTES = 12
 
 _WAVE_STEP_BG = 3
 
@@ -85,8 +89,8 @@ class MainWindow(QWidget):
         self._last_hand_at = time.monotonic()
         self._idle_active = False
         self._idle_note = 0
-        self._standby_active = False
-        self._hints_visible = True
+        self._standby_active = True
+        self._hints_visible = False
         self._heartbeat_enabled = True
         
         self.is_input_locked = False
@@ -125,12 +129,14 @@ class MainWindow(QWidget):
         self._last_note_change = 0.0
 
         self._camera_error = ""
+        self._idle_last_cycle = 0.0
+        self._standby_exit_hold_start = None
 
         self.selector_radius_scale = 0.39
         self.center_plate_radius_scale = 0.33
         
-        self.sector_labels = ["E", "D", "C", "B", "A", "F"]
-        self.image_labels = ["D#", "F#", "G#", "A#", "G", "C#"]
+        self.sector_labels = ["E", "D", "C₄", "B", "A", "G"]
+        self.image_labels = ["F", "D#", "C#", "C₅", "A#", "G#"]
         
         self.section_colors = [
             QColor("#00d9e8"), QColor("#7d3c98"), QColor("#00ff25"),
@@ -143,6 +149,10 @@ class MainWindow(QWidget):
 
         self.image_btn_hover = False
         self.image_btn_rect = QRectF()
+        self._shuffle_btn_hover = False
+        self._shuffle_btn_rect = QRectF()
+        self._shuffle_dwell_start = None
+        self._shuffle_locked = False
         self._chladni_cache = {}
 
     def _init_ui_components(self):
@@ -306,7 +316,11 @@ class MainWindow(QWidget):
 
         if not self._idle_active and (now - self._last_interaction >= IDLE_TIMEOUT_S):
             self._enter_idle_mode()
-        
+        elif self._idle_active and (now - self._idle_last_cycle >= CYCLE_INTERVAL_S):
+            self._idle_note = (self._idle_note + 1) % _TOTAL_NOTES
+            self._idle_last_cycle = now
+            self._trigger_idle_note()
+
         if not self._standby_active and (now - self._last_hand_at >= _STANDBY_TIMEOUT_S):
             self._enter_standby()
 
@@ -339,7 +353,8 @@ class MainWindow(QWidget):
                 total_lockout = fade_in + sustain + fade_out
                 
                 self.client.trigger(self._dwell_note_id)
-                
+                self._unlock_shuffle()
+
                 # Apply the Smart Lockout
                 self.is_input_locked = True
                 self._lockout_timer.start(total_lockout)
@@ -347,25 +362,34 @@ class MainWindow(QWidget):
                 self._last_note_change = now; self._record_interaction()
             self.dwell_progress = 0.0; self._dwell_armed = False
 
+    def _unlock_shuffle(self):
+        self._shuffle_locked = False
+
     def trigger_shuffle(self):
         if self.is_input_locked: return
-        
-        # Calculate total duration of all SHUFFLE_x steps
-        total_lockout = 0
+
+        shuffle_steps = []
         for i in range(1, 100):
             sid = f"SHUFFLE_{i}"
             if sid in self.catalogue:
-                p = self.catalogue[sid]
-                total_lockout += p.get("fade_in_ms", 100) + p.get("symbol_duration_ms", 500) + p.get("fade_out_ms", 100)
+                shuffle_steps.append(self.catalogue[sid])
             else:
                 break
-        
-        if total_lockout > 0:
-            self.client.shuffle()
-            self.is_input_locked = True
-            self._lockout_timer.start(total_lockout)
-            self._record_interaction()
-            self.update()
+
+        if not shuffle_steps:
+            return
+
+        for i, step in enumerate(shuffle_steps):
+            note = step.get("music_note")
+            if note is not None:
+                QTimer.singleShot(i * _SHUFFLE_STEP_DELAY_MS, lambda n=note: self.client.trigger(n))
+
+        total_lockout = _SHUFFLE_STEP_DELAY_MS * len(shuffle_steps)
+        self.is_input_locked = True
+        self._shuffle_locked = True
+        self._lockout_timer.start(total_lockout)
+        self._record_interaction()
+        self.update()
 
     def _id_for_note(self, note_id):
         for name, entry in self.catalogue.items():
@@ -399,12 +423,32 @@ class MainWindow(QWidget):
         return int(angle // 60) % 6
 
     def _record_interaction(self): self._last_interaction = time.monotonic(); self._exit_idle_mode()
-    def _enter_idle_mode(self): self._idle_active = True
-    def _exit_idle_mode(self): self._idle_active = False
-    
+    def _enter_idle_mode(self):
+        self._idle_active = True
+        self._idle_last_cycle = time.monotonic()
+        print(f"[UI] Idle mode entered — cycling every {CYCLE_INTERVAL_S}s")
+        self._trigger_idle_note()
+    def _exit_idle_mode(self):
+        if self._idle_active:
+            print("[UI] Idle mode exited")
+        self._idle_active = False
+        self._idle_note = 0
+    def _trigger_idle_note(self):
+        ch_id = self._id_for_note(self._idle_note)
+        print(f"[UI] Idle cycle → note {self._idle_note} ({ch_id})")
+        for use_image, labels in ((False, self.sector_labels), (True, self.image_labels)):
+            for idx, label in enumerate(labels):
+                if NOTE_MAP.get(label) == self._idle_note:
+                    self.selected_section = idx
+                    self.image_mode = use_image
+                    break
+        if ch_id:
+            self.client.trigger(self._idle_note)
+            self._unlock_shuffle()
+
     def trigger_standby_test(self): self._enter_standby(); self.update()
-    def _enter_standby(self): self._standby_active = True
-    def _exit_standby(self): self._standby_active = False
+    def _enter_standby(self): self._standby_active = True; self._standby_exit_hold_start = None
+    def _exit_standby(self): self._standby_active = False; self._standby_exit_hold_start = None
 
     def paintEvent(self, event):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
@@ -414,8 +458,8 @@ class MainWindow(QWidget):
         note_id = self._idle_note if self._idle_active else self._selected_note_id
         channels = self._get_active_channels()
         
-        p.save(); p.translate(cx, cy); p.rotate(30)
-        self._draw_wave(p, -1000, 0, 2000, channels); p.restore()
+        p.save(); p.rotate(30)
+        self._draw_wave(p, 0, 0, int(math.hypot(w, h) * 1.5), channels); p.restore()
         
         self._draw_ambient_warning(p, w, h)
         
@@ -448,7 +492,8 @@ class MainWindow(QWidget):
         
         if self._hints_visible: self._draw_hints(p, w, h)
         self._draw_heartbeat_indicator(p, w)
-        self._draw_image_button(p, w - 104, 16)
+        self._draw_shuffle_button(p, w - 192, 16)
+        self._draw_image_button(p, w - 104, 152)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
         wave_count = 4; spacing = 44; speed = self.t * 4.0;
@@ -585,6 +630,7 @@ class MainWindow(QWidget):
         id_ = self._id_for_note(self._idle_note if self._idle_active else self._selected_note_id); img = self._symbol_images.get(id_)
         p.setBrush(QColor("#bf8a47")); p.setPen(QPen(QColor("#f3cf8d"), max(2, int(radius*0.03)))); p.drawEllipse(QPointF(cx, cy), radius, radius)
         p.setBrush(QColor(245,218,165,58)); p.setPen(QPen(QColor("#6b3f1d"), max(1, int(radius*0.015)))); p.drawEllipse(QPointF(cx, cy), radius*0.9, radius*0.9)
+        if self._shuffle_locked: return
         inner_r = radius * 0.86; target = QRectF(cx-inner_r, cy-inner_r, inner_r*2, inner_r*2); clip = QPainterPath(); clip.addEllipse(target)
         p.save(); p.setClipPath(clip)
         if img: p.drawImage(target, img, self.cover_source_rect(img.width(), img.height()))
@@ -741,6 +787,13 @@ class MainWindow(QWidget):
             
         p.setOpacity(1.0)
 
+    def _draw_shuffle_button(self, p, x, y):
+        self._shuffle_btn_rect = QRectF(x, y, 176, 128)
+        base = QColor("#2a1e4a") if not self._shuffle_btn_hover else QColor("#3d2e6e")
+        p.setBrush(base); p.setPen(QPen(QColor("#9b59f5"), 3)); p.drawRoundedRect(self._shuffle_btn_rect, 8, 8)
+        p.setPen(QColor("#d4b8ff")); p.setFont(QFont("Arial", 18, QFont.Bold))
+        p.drawText(self._shuffle_btn_rect, Qt.AlignCenter, "⟳  SHUFFLE")
+
     def _draw_image_button(self, p, x, y):
         self.image_btn_rect = QRectF(x, y, 88, 64); base = QColor("#1d8dbf") if self.using_image_mode() else QColor("#24252b")
         if self.image_btn_hover: base = base.lighter(132)
@@ -752,9 +805,38 @@ class MainWindow(QWidget):
         p.drawLine(QPointF(bx-8, by+20), QPointF(bx-18, by+10)); p.drawLine(QPointF(bx+8, by+20), QPointF(bx+18, by+10))
 
     def set_tracked_hands(self, left, right, closed, cursor):
-        if left or right: self._last_hand_at = time.monotonic(); self._exit_standby(); self._record_interaction()
+        now = time.monotonic()
+        if left or right:
+            self._last_hand_at = now
+            self._record_interaction()
+            if self._standby_active:
+                if self._standby_exit_hold_start is None:
+                    self._standby_exit_hold_start = now
+                elif now - self._standby_exit_hold_start >= _STANDBY_EXIT_HOLD_S:
+                    self._exit_standby()
+            else:
+                self._standby_exit_hold_start = None
+        else:
+            if self._standby_exit_hold_start is not None and (now - self._last_hand_at) > 1.0:
+                self._standby_exit_hold_start = None
         self.left_hand, self.right_hand, self.blue_hand_closed = left, right, closed
-        if cursor: self.mouse_pos = cursor; self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos)
+        if cursor:
+            self.mouse_pos = cursor
+            self.hover_section = self.section_at(self.mouse_pos)
+            self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos)
+            over_shuffle = self._shuffle_btn_rect.contains(self.mouse_pos)
+            self._shuffle_btn_hover = over_shuffle
+            if over_shuffle and not self._shuffle_locked and not self.is_input_locked:
+                if self._shuffle_dwell_start is None:
+                    self._shuffle_dwell_start = now
+                elif now - self._shuffle_dwell_start >= 0.5:
+                    self.trigger_shuffle()
+                    self._shuffle_locked = True
+                    self._shuffle_dwell_start = None
+            else:
+                self._shuffle_dwell_start = None
+        else:
+            self._shuffle_dwell_start = None
         self.update()
 
     def set_center_live_image(self, img): self.center_live_image = img; self.update()
@@ -769,10 +851,12 @@ class MainWindow(QWidget):
     def keyReleaseEvent(self, e):
         if e.key()==Qt.Key_F: self.blue_hand_closed = False; self.sharp_mode_until = 0.0; self.update()
         super().keyReleaseEvent(e)
-    def mouseMoveEvent(self, e): self.mouse_pos = QPointF(e.position()); self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos); self._record_interaction(); self.update()
+    def mouseMoveEvent(self, e): self.mouse_pos = QPointF(e.position()); self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos); self._shuffle_btn_hover = self._shuffle_btn_rect.contains(self.mouse_pos); self._record_interaction(); self.update()
     def mousePressEvent(self, e):
-        if e.button()==Qt.LeftButton and self.image_btn_rect.contains(e.position()): self.image_mode = not self.image_mode; self._record_interaction(); self.update()
-    def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self.update(); super().leaveEvent(e)
+        if e.button() == Qt.LeftButton:
+            if self.image_btn_rect.contains(e.position()): self.image_mode = not self.image_mode; self._record_interaction(); self.update()
+            elif self._shuffle_btn_rect.contains(e.position()): self.trigger_shuffle()
+    def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self._shuffle_btn_hover = False; self.update(); super().leaveEvent(e)
     def resizeEvent(self, e):
         self._chladni_cache.clear()
         super().resizeEvent(e)

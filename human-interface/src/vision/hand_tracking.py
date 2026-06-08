@@ -22,20 +22,20 @@ def get_resource_path(relative_path):
 # --- Configuration & Constants (Updated to Latest Legacy Specs) ---
 MODEL_PATH = get_resource_path("models/hand_landmarker.task")
 
-CAMERA_WIDTH = 1920
-CAMERA_HEIGHT = 1020
-CAMERA_FPS = 20
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+CAMERA_FPS = 30
 
 DETECTION_WIDTH = 1280
-DETECTION_HEIGHT = 920 
+DETECTION_HEIGHT = 720
 DETECTION_INTERVAL_MS = 33
-RESULT_HOLD_MS = 350
+RESULT_HOLD_MS = 200
 OPTICAL_FLOW_HOLD_MS = 1200
-TRACKING_FPS = 20
+TRACKING_FPS = 30
 
 LEFT_HAND_CLOSE_HOLD_SECONDS = 0.45
 
-LIVE_FOOTAGE_FPS = 20
+LIVE_FOOTAGE_FPS = 30
 
 # --- Sysfs helpers for V4L2 device classification ---
 
@@ -194,6 +194,17 @@ class HandTrackingThread(QThread):
 
     def stop(self): self.running = False
 
+    def set_exposure(self, value: int):
+        import subprocess
+        source = self.camera_index
+        if isinstance(source, int):
+            source = f"/dev/video{source}"
+        try:
+            subprocess.run(["v4l2-ctl", "-d", str(source), "-c", f"exposure_time_absolute={value}"],
+                           check=False, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
     def run(self):
         cap = open_camera(self.camera_index)
         if not cap.isOpened():
@@ -260,10 +271,20 @@ class HandTrackingThread(QThread):
 
                 if fresh:
                     sorted_lms = sorted(res.hand_landmarks, key=lambda h: sum(l.x for l in h)/len(h))
-                    left = normalized_landmark_points(sorted_lms[0], mapping)
-                    if len(sorted_lms) >= 2: right = normalized_landmark_points(sorted_lms[-1], mapping)
+                    if len(sorted_lms) >= 2:
+                        left = normalized_landmark_points(sorted_lms[0], mapping)
+                        right = normalized_landmark_points(sorted_lms[-1], mapping)
+                    else:
+                        avg_x = sum(l.x for l in sorted_lms[0]) / len(sorted_lms[0])
+                        pts = normalized_landmark_points(sorted_lms[0], mapping)
+                        if avg_x > 0.5:
+                            left, right = None, pts
+                        else:
+                            left, right = pts, None
                     self.smoothed_l, self.smoothed_r = left, right
-                    self.last_l_at = self.last_r_at = time.monotonic()
+                    now_t = time.monotonic()
+                    if left is not None: self.last_l_at = now_t
+                    if right is not None: self.last_r_at = now_t
                 elif prev_gray is not None and (self.smoothed_l or self.smoothed_r):
                     if (time.monotonic() - max(self.last_l_at, self.last_r_at)) * 1000 <= OPTICAL_FLOW_HOLD_MS:
                         h, w = frame.shape[:2]
