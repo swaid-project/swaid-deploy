@@ -171,10 +171,10 @@ class MainWindow(QWidget):
             self.camera_choices = []
         if not self.camera_choices: self.camera_choices = [("Default", "/dev/video0")]
         
-        self.track_cam_idx = 0
-        self.center_cam_idx = 0
         self.calib_tgt_idx = 0
-        self.brightness_val = 0.42 # Approx 204 exposure
+        self.exposure_track = 204
+        self.exposure_center = 204
+        self.brightness_val = max(0.0, min(1.0, (204 - 20) / 480.0))
         self._cam_menu_dwell_start = None
         self._cam_menu_hovered_btn = -1
 
@@ -543,17 +543,22 @@ class MainWindow(QWidget):
     def _draw_camera_menu(self, p, w, h):
         if not getattr(self, "camera_menu_open", False): return
         
-        # Dim background
-        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
+        from PySide6.QtGui import QRegion
+        base_r = min(w, h); center_r = base_r * self.center_plate_radius_scale
+        cx, cy = w/2, h/2
         
-        # Right Side Menu
-        menu_w, menu_h = 350, 400
-        rx, ry = w - menu_w - 40, (h - menu_h) // 2
+        region = QRegion(0, 0, int(w), int(h))
+        hole = QRegion(int(cx - center_r), int(cy - center_r), int(center_r*2), int(center_r*2), QRegion.Ellipse)
+        p.setClipRegion(region.subtracted(hole))
+        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
+        p.setClipping(False)
+        
+        # Right Side Menu (Only 1 button now)
+        menu_w = 350
+        rx, ry = w - menu_w - 40, (h - 100) // 2
         
         opts = [
-            ("Tracking Camera", self.camera_choices[self.track_cam_idx][0]),
-            ("Center Camera", self.camera_choices[self.center_cam_idx][0]),
-            ("Calibrate Target", "Tracking Camera" if self.calib_tgt_idx == 0 else "Center Camera")
+            ("Calibrate Target", "Handtracking Camera" if self.calib_tgt_idx == 0 else "Center Feed Camera")
         ]
         
         for i, (title, val) in enumerate(opts):
@@ -586,6 +591,12 @@ class MainWindow(QWidget):
         sx, sy = 80, (h - 400) // 2
         p.setPen(QPen(QColor(40, 40, 50, 240), 10, Qt.SolidLine, Qt.RoundCap))
         p.drawLine(sx, sy, sx, sy + 400)
+        
+        # Exposure value label above slider
+        current_exp = int(20 + self.brightness_val * 480)
+        p.setFont(QFont("Arial", 18, QFont.Bold))
+        p.setPen(Qt.white)
+        p.drawText(QRectF(sx - 50, sy - 50, 100, 40), Qt.AlignCenter, str(current_exp))
         
         # Icon below the slide bar
         if getattr(self, "_bri_icon", None):
@@ -977,36 +988,35 @@ class MainWindow(QWidget):
                     if abs(val - self.brightness_val) > 0.02:
                         self.brightness_val = val
                         exp = int(20 + val * 480)
+                        if self.calib_tgt_idx == 0: self.exposure_track = exp
+                        else: self.exposure_center = exp
                         self.exposure_changed.emit(exp)
             
             # Right menu logic
             if self.mouse_pos:
                 menu_w = 350
                 rx = w - menu_w - 40
-                ry = (h - 400) // 2
+                ry = (h - 100) // 2
                 
                 hovered_now = -1
-                for i in range(3):
-                    by = ry + i * 120
-                    if QRectF(rx, by, menu_w, 100).contains(self.mouse_pos):
-                        hovered_now = i
-                        break
+                if QRectF(rx, ry, menu_w, 100).contains(self.mouse_pos):
+                    hovered_now = 0
                         
                 if hovered_now != -1:
                     if self._cam_menu_hovered_btn != hovered_now:
                         self._cam_menu_hovered_btn = hovered_now
                         self._cam_menu_dwell_start = now
                     elif self._cam_menu_dwell_start and (now - self._cam_menu_dwell_start >= 1.0):
-                        # Dwell triggered, cycle value
-                        if hovered_now == 0:
-                            self.track_cam_idx = (self.track_cam_idx + 1) % len(self.camera_choices)
-                            self.tracking_camera_changed.emit(self.camera_choices[self.track_cam_idx][1])
-                        elif hovered_now == 1:
-                            self.center_cam_idx = (self.center_cam_idx + 1) % len(self.camera_choices)
-                            self.center_camera_changed.emit(self.camera_choices[self.center_cam_idx][1])
-                        elif hovered_now == 2:
-                            self.calib_tgt_idx = 1 - self.calib_tgt_idx
-                        self._cam_menu_dwell_start = now + 0.5 # Add small delay before next cycle
+                        # Toggle Calibration Target
+                        self.calib_tgt_idx = 1 - self.calib_tgt_idx
+                        # Snap slider to new target
+                        if self.calib_tgt_idx == 0:
+                            self.brightness_val = max(0.0, min(1.0, (self.exposure_track - 20) / 480.0))
+                        else:
+                            self.brightness_val = max(0.0, min(1.0, (self.exposure_center - 20) / 480.0))
+                        
+                        self.center_camera_changed.emit(str(self.calib_tgt_idx)) # Tells main.py which feed to show
+                        self._cam_menu_dwell_start = now + 0.5 # Delay
                 else:
                     self._cam_menu_hovered_btn = -1
                     self._cam_menu_dwell_start = None
