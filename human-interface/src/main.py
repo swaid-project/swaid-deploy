@@ -127,6 +127,9 @@ def main():
         track_dev = get_camera_device_by_usb_port(state["track_port_id"])
         center_dev = get_camera_device_by_usb_port(state["center_port_id"])
         
+        print(f"[DEBUG Heartbeat] track_port='{state['track_port_id']}' resolved_to={track_dev}")
+        print(f"[DEBUG Heartbeat] center_port='{state['center_port_id']}' resolved_to={center_dev}")
+        
         if track_dev != state["tracking_camera"]:
             print(f"[Main] Tracking camera changed: {state['tracking_camera']} -> {track_dev}")
             state["tracking_camera"] = track_dev

@@ -14,11 +14,14 @@ class CenterCameraThread(QThread):
     def run(self):
         from vision.hand_tracking import open_camera
         
+        print(f"[CenterCamera] Attempting to open {self.camera_source}...")
         cap = open_camera(self.camera_source)
-        if not cap.isOpened():
-            print(f"[CenterCamera] Failed to open {self.camera_source}")
+        if not cap or not cap.isOpened():
+            print(f"[CenterCamera] ERROR: Failed to open {self.camera_source}")
             self.running = False
             return
+            
+        print(f"[CenterCamera] SUCCESS! Started reading from {self.camera_source}")
             
         while self.running:
             ret, frame = cap.read()
