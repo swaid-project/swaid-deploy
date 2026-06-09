@@ -12,14 +12,11 @@ class CenterCameraThread(QThread):
         self.running = True
         
     def run(self):
-        source = self.camera_source
-        if isinstance(source, str) and source.startswith("/dev/video"):
-            try: source = int(source.replace("/dev/video", ""))
-            except ValueError: pass
-            
-        cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
+        from vision.hand_tracking import open_camera
+        
+        cap = open_camera(self.camera_source)
         if not cap.isOpened():
-            print(f"[CenterCamera] Failed to open {self.camera_source} (mapped to {source})")
+            print(f"[CenterCamera] Failed to open {self.camera_source}")
             self.running = False
             return
             
