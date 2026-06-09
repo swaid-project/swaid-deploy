@@ -24,7 +24,7 @@ NOTE_MAP = {
     "C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
     "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
 }
-IDLE_TIMEOUT_S = 5 * 60
+IDLE_TIMEOUT_S = 1 * 60
 CYCLE_INTERVAL_S = 60
 _STANDBY_TIMEOUT_S = 5 * 60
 _STANDBY_EXIT_HOLD_S = 5.0
@@ -537,17 +537,14 @@ class MainWindow(QWidget):
         self._draw_ambient_warning(p, w, h)
         
         base_r = min(w, h); sel_r = base_r * self.selector_radius_scale
-        center_r = base_r * self.center_plate_radius_scale; preview_r = max(150, base_r * 0.15)
-        
+        center_r = base_r * self.center_plate_radius_scale
+
         self._draw_actuation_ripple(p, cx, cy, sel_r)
-        
+
         self._draw_selector(p, cx, cy, sel_r)
         self._draw_center_plate(p, cx, cy, center_r)
         self._draw_dwell_ring(p, cx, cy, sel_r)
-        
-        px, py = w - preview_r - 20, h - preview_r - 20
-        self._draw_preview_disc(p, px, py, preview_r)
-        
+
         self._draw_hands(p)
         
         if self._standby_active: self._draw_standby_overlay(p, cx, cy, center_r)
@@ -778,17 +775,6 @@ class MainWindow(QWidget):
         if self.center_live_image: p.drawImage(target, self.center_live_image, self.cover_source_rect(self.center_live_image.width(), self.center_live_image.height()))
         else: p.fillRect(target, QColor("#0a0b0e"))
         p.restore()
-
-    def _draw_preview_disc(self, p, cx, cy, radius):
-        id_ = self._id_for_note(self._idle_note if self._idle_active else self._selected_note_id); img = self._symbol_images.get(id_)
-        p.setBrush(QColor("#bf8a47")); p.setPen(QPen(QColor("#f3cf8d"), max(2, int(radius*0.03)))); p.drawEllipse(QPointF(cx, cy), radius, radius)
-        p.setBrush(QColor(245,218,165,58)); p.setPen(QPen(QColor("#6b3f1d"), max(1, int(radius*0.015)))); p.drawEllipse(QPointF(cx, cy), radius*0.9, radius*0.9)
-        if self._shuffle_locked: return
-        inner_r = radius * 0.86; target = QRectF(cx-inner_r, cy-inner_r, inner_r*2, inner_r*2); clip = QPainterPath(); clip.addEllipse(target)
-        p.save(); p.setClipPath(clip)
-        if img: p.drawImage(target, img, self.cover_source_rect(img.width(), img.height()))
-        p.restore()
-
 
 
     def _draw_hands(self, p):
