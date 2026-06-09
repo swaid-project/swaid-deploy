@@ -47,8 +47,9 @@ from PySide6.QtCore import QTimer
 def load_system_config():
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         # Running as compiled PyInstaller executable (e.g. dist/SWAID_Interface/SWAID_Interface)
-        # So we go up two dirs from the executable to hit the project root
-        base_dir = Path(sys.executable).parent.parent.parent
+        # sys.executable = swaid-deploy/human-interface/dist/SWAID_Interface/SWAID_Interface
+        # We need 4 parents to reach swaid-deploy
+        base_dir = Path(sys.executable).parent.parent.parent.parent
     else:
         # Running from python source in src/main.py
         base_dir = Path(__file__).parent.parent.parent
