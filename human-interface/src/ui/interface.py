@@ -157,6 +157,7 @@ class MainWindow(QWidget):
         self._shuffle_dwell_start = None
         self._shuffle_locked = False
         self._chladni_cache = {}
+        self._center_live_pixmap = None
         
         self._gesture_dwell_state = {
             "steeple": {"active": False, "start": 0.0, "armed": True},
@@ -772,7 +773,8 @@ class MainWindow(QWidget):
     def _draw_center_plate(self, p, cx, cy, radius):
         inner_r = radius * 0.86; target = QRectF(cx-inner_r, cy-inner_r, inner_r*2, inner_r*2); clip = QPainterPath(); clip.addEllipse(target)
         p.save(); p.setClipPath(clip)
-        if self.center_live_image: p.drawImage(target, self.center_live_image, self.cover_source_rect(self.center_live_image.width(), self.center_live_image.height()))
+        if self._center_live_pixmap: p.drawPixmap(target.toRect(), self._center_live_pixmap)
+        elif self.center_live_image: p.drawImage(target, self.center_live_image, self.cover_source_rect(self.center_live_image.width(), self.center_live_image.height()))
         else: p.fillRect(target, QColor("#0a0b0e"))
         p.restore()
 
@@ -1029,7 +1031,24 @@ class MainWindow(QWidget):
 
         self.update()
 
-    def set_center_live_image(self, img): self.center_live_image = img; self.update()
+    def set_center_live_image(self, img):
+        self.center_live_image = img
+        if img is not None:
+            inner_r = min(self.width(), self.height()) * self.center_plate_radius_scale * 0.86
+            size = max(2, int(inner_r * 2))
+            pix = QPixmap.fromImage(img)
+            iw, ih = img.width(), img.height()
+            if iw > 0 and ih > 0:
+                scale = max(size / iw, size / ih)
+                sw, sh = int(iw * scale), int(ih * scale)
+                sx = (sw - size) // 2
+                sy = (sh - size) // 2
+                self._center_live_pixmap = pix.scaled(sw, sh, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).copy(sx, sy, size, size)
+            else:
+                self._center_live_pixmap = None
+        else:
+            self._center_live_pixmap = None
+        self.update()
     def keyPressEvent(self, e):
         if e.key()==Qt.Key_S: self.trigger_shuffle()
         elif e.key()==Qt.Key_H: self._heartbeat_enabled = not self._heartbeat_enabled; self.heartbeat_toggled.emit(self._heartbeat_enabled)
@@ -1045,4 +1064,5 @@ class MainWindow(QWidget):
     def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self._shuffle_btn_hover = False; self.update(); super().leaveEvent(e)
     def resizeEvent(self, e):
         self._chladni_cache.clear()
+        self._center_live_pixmap = None
         super().resizeEvent(e)
