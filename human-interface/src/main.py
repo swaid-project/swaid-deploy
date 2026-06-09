@@ -45,12 +45,24 @@ from vision.hardware_discovery import get_camera_device_by_usb_port, apply_v4l2_
 from PySide6.QtCore import QTimer
 
 def load_system_config():
-    path = Path(__file__).parent.parent.parent / "json_config" / "system_config.json"
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as compiled PyInstaller executable (e.g. dist/SWAID_Interface/SWAID_Interface)
+        # So we go up two dirs from the executable to hit the project root
+        base_dir = Path(sys.executable).parent.parent.parent
+    else:
+        # Running from python source in src/main.py
+        base_dir = Path(__file__).parent.parent.parent
+        
+    path = base_dir / "json_config" / "system_config.json"
+    print(f"[Main] Loading system config from: {path}")
     if path.exists():
         try:
             with open(path, "r") as f:
                 return json.load(f)
-        except Exception: pass
+        except Exception as e:
+            print(f"[Main] Failed to parse system_config.json: {e}")
+    else:
+        print(f"[Main] system_config.json NOT FOUND at {path}")
     return {}
 
 def main():
