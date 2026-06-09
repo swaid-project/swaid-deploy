@@ -181,6 +181,36 @@ class MainWindow(QWidget):
     def _init_ui_components(self):
         self._active_warning_msg = ""
         self._active_warning_critical = False
+        self._qr_pixmap = self._make_server_qr(140)
+
+    @staticmethod
+    def _get_local_ip() -> str:
+        import socket
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    def _make_server_qr(self, size: int):
+        try:
+            import qrcode
+            from PIL import Image as PilImage
+            url = f"http://{self._get_local_ip()}:5001"
+            qr = qrcode.QRCode(border=1, error_correction=qrcode.constants.ERROR_CORRECT_L)
+            qr.add_data(url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="white", back_color="#0d0f14").convert("RGBA")
+            img = img.resize((size, size), PilImage.NEAREST)
+            arr = np.array(img, dtype=np.uint8)
+            h, w = arr.shape[:2]
+            qimg = QImage(arr.data, w, h, w * 4, QImage.Format_RGBA8888).copy()
+            return QPixmap.fromImage(qimg)
+        except Exception:
+            return None
 
     def _preload_status_icons(self):
         icon_names = ["server", "fist", "openhand", "ippe-vibrate"]
@@ -531,7 +561,14 @@ class MainWindow(QWidget):
 
         if self._logo:
             lh = 100; lw = int(lh * self._logo.width() / self._logo.height())
-            p.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
+            logo_y = h - lh - 16
+            p.drawPixmap(16, logo_y, lw, lh, self._logo)
+            if self._qr_pixmap:
+                qr_size = 140
+                p.drawPixmap(16, logo_y - qr_size - 6, qr_size, qr_size, self._qr_pixmap)
+        elif self._qr_pixmap:
+            qr_size = 140
+            p.drawPixmap(16, h - qr_size - 16, qr_size, qr_size, self._qr_pixmap)
         
         if self._hints_visible: self._draw_hints(p, w, h)
         

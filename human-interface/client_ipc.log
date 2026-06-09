@@ -62,3 +62,30 @@
 2026-06-08 01:20:43,955 - DEBUG - RX <- {"status": "ok", "diagnostics": {"pico_serial": 1, "usb_audio": 1, "UDP_connection": 1, "music_state": 1, "transducer_state": 1}, "active_state": {"current_note": 2, "current_chladni_id": "CHLADNI_422", "led_effect_id": 2}}
 2026-06-08 01:21:25,685 - DEBUG - TX -> {"trace_id": "req-0d4853b5", "message_type": "trigger", "music_note": 9}
 2026-06-08 01:21:25,700 - DEBUG - RX <- {"status": "ok", "diagnostics": {"pico_serial": 1, "usb_audio": 1, "UDP_connection": 1, "music_state": 1, "transducer_state": 1}, "active_state": {"current_note": 9, "current_chladni_id": "CHLADNI_883", "led_effect_id": 9}}
+2026-06-09 11:49:58,977 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 11:51:11,584 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 11:51:13,155 - DEBUG - TX -> {"trace_id": "req-26ee728e", "message_type": "trigger", "music_note": 0}
+2026-06-09 11:52:38,740 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 11:52:40,613 - DEBUG - TX -> {"trace_id": "req-d859dbb3", "message_type": "trigger", "music_note": 0}
+2026-06-09 11:55:47,683 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 11:55:50,156 - DEBUG - TX -> {"trace_id": "req-1d84b978", "message_type": "trigger", "music_note": 11}
+2026-06-09 11:56:05,056 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 11:56:06,595 - DEBUG - TX -> {"trace_id": "req-0c22b51f", "message_type": "trigger", "music_note": 0}
+2026-06-09 11:57:13,618 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:00:48,682 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:03:12,548 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:07:38,991 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:08:34,815 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:08:36,368 - DEBUG - TX -> {"trace_id": "req-0455bb8c", "message_type": "trigger", "music_note": 0}
+2026-06-09 12:12:06,146 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:12:07,688 - DEBUG - TX -> {"trace_id": "req-d4f9bd8f", "message_type": "trigger", "music_note": 0}
+2026-06-09 12:15:12,642 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:15:14,196 - DEBUG - TX -> {"trace_id": "req-4f78d7bd", "message_type": "trigger", "music_note": 0}
+2026-06-09 12:21:08,849 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:21:10,422 - DEBUG - TX -> {"trace_id": "req-977f704a", "message_type": "trigger", "music_note": 0}
+2026-06-09 12:23:46,772 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:23:48,612 - DEBUG - TX -> {"trace_id": "req-4afc1834", "message_type": "trigger", "music_note": 0}
+2026-06-09 12:24:26,839 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:24:28,372 - DEBUG - TX -> {"trace_id": "req-934b75d9", "message_type": "trigger", "music_note": 0}
+2026-06-09 12:26:31,403 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 12:26:32,948 - DEBUG - TX -> {"trace_id": "req-6db8783e", "message_type": "trigger", "music_note": 0}

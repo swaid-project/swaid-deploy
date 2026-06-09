@@ -1,6 +1,9 @@
+import os
 import sys
 import json
 import time
+import signal
+import subprocess
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QDialog
 from PySide6.QtCore import QPointF, QRectF
@@ -66,6 +69,38 @@ def load_system_config():
         print(f"[Main] system_config.json NOT FOUND at {path}")
     return {}
 
+def _start_cam_server(device: str | None = None) -> subprocess.Popen | None:
+    server_script = Path(__file__).parent.parent / "server" / "Example.py"
+    if not server_script.exists():
+        print(f"[Main] cam server not found at {server_script}, skipping")
+        return None
+    try:
+        env = os.environ.copy()
+        if device:
+            env["CAM_DEVICE"] = device
+        proc = subprocess.Popen(
+            [sys.executable, str(server_script)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
+        )
+        print(f"[Main] Camera server started (pid={proc.pid}, device={device or 'auto'}) on port 5001")
+        return proc
+    except Exception as e:
+        print(f"[Main] Failed to start camera server: {e}")
+        return None
+
+def _stop_proc(proc: subprocess.Popen | None):
+    if proc is None:
+        return
+    try:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    except Exception:
+        pass
+
 def main():
     app = QApplication(sys.argv)
     client = ResonanceClient()
@@ -76,6 +111,8 @@ def main():
     sys_cfg = load_system_config()
     cam_cfg = sys_cfg.get("camera_topology", {})
     
+    cam_server = _start_cam_server()
+
     state = {
         "track_port_id": cam_cfg.get("handtracking_port", "/dev/video0"),
         "center_port_id": cam_cfg.get("center_feed_port", "1-2.2"),
@@ -83,6 +120,7 @@ def main():
         "center_camera": None,
         "tracker": None,
         "center_thread": None,
+        "cam_server": cam_server,
         "exposure_track": cam_cfg.get("exposure_track", 204),
         "exposure_center": cam_cfg.get("exposure_center", 204),
         "calib_tgt_idx": 0,
@@ -118,7 +156,11 @@ def main():
         if getattr(window, "camera_menu_open", False):
             if state["calib_tgt_idx"] == source_idx:
                 window.set_center_live_image(qimg)
-        elif source_idx == 1:
+            return
+        # When same camera for both roles, tracker (0) provides the center feed
+        same_device = (state["tracking_camera"] and
+                       state["tracking_camera"] == state["center_camera"])
+        if source_idx == 1 or (source_idx == 0 and same_device):
             window.set_center_live_image(qimg)
 
     def start_tracker(camera_index):
@@ -129,6 +171,9 @@ def main():
         tracker.start()
         state["tracker"] = tracker
         window.set_camera_error("")
+        # Restart cam server so its stream follows the tracking camera
+        _stop_proc(state["cam_server"])
+        state["cam_server"] = _start_cam_server(camera_index)
 
     def start_center_camera(camera_index):
         cthread = CenterCameraThread(camera_index)
@@ -137,6 +182,11 @@ def main():
         state["center_thread"] = cthread
 
     def heartbeat_check():
+        # Re-read config each tick so Flask server camera changes are picked up
+        live_cfg = load_system_config().get("camera_topology", {})
+        state["track_port_id"]  = live_cfg.get("handtracking_port", state["track_port_id"])
+        state["center_port_id"] = live_cfg.get("center_feed_port",  state["center_port_id"])
+
         track_dev = get_camera_device_by_usb_port(state["track_port_id"])
         center_dev = get_camera_device_by_usb_port(state["center_port_id"])
         
@@ -163,9 +213,11 @@ def main():
                 state["center_thread"].stop()
                 state["center_thread"].wait(1000)
                 state["center_thread"] = None
-            if center_dev:
+            if center_dev and center_dev != state["tracking_camera"]:
+                # Different device — open dedicated thread
                 apply_v4l2_config(center_dev, state["exposure_center"])
                 start_center_camera(center_dev)
+            # Same device as tracker — update_center_preview routes tracker frames instead
 
     hb_timer = QTimer()
     hb_timer.timeout.connect(heartbeat_check)
@@ -200,6 +252,7 @@ def main():
         if state["center_thread"]:
             state["center_thread"].stop()
             state["center_thread"].wait(1000)
+        _stop_proc(state["cam_server"])
         client.stop()
         
     sys.exit(exit_code)
