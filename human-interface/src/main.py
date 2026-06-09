@@ -105,7 +105,7 @@ def main():
         if getattr(window, "camera_menu_open", False):
             if state["calib_tgt_idx"] == source_idx:
                 window.set_center_live_image(qimg)
-        elif source_idx == 0:
+        elif source_idx == 1:
             window.set_center_live_image(qimg)
 
     def start_tracker(camera_index):
