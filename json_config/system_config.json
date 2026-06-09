@@ -26,8 +26,8 @@
         "soundcard": 25
     },
     "camera_topology": {
-        "handtracking_port": "/dev/video0",
-        "center_feed_port": "1-6",
+        "handtracking_port": "1-1",
+        "center_feed_port": "1-8",
         "exposure_track": 204,
         "exposure_center": 204
     }
