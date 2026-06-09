@@ -1,21 +1,21 @@
 [
     {
         "music_note": 0,
-        "display_name": "CHLADNI_1372",
+        "display_name": "CHLADNI_1359",
         "LED_effect": 0,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 1372, "amplitude": 0.4, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 1372, "amplitude": 0.4, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 1372, "amplitude": 0.4, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 1372, "amplitude": 0.4, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 1359, "amplitude": 0.4, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 1359, "amplitude": 0.4, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 1359, "amplitude": 0.4, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 1359, "amplitude": 0.4, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
-            "image_path": "./dictionary/CHLADNI_1372.png"
+            "image_path": "./dictionary/CHLADNI_1359.png"
         }
     },
     {
@@ -27,10 +27,10 @@
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 1919, "amplitude": 0.4, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 1919, "amplitude": 0.4, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 1919, "amplitude": 0.4, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 1919, "amplitude": 0.4, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 1919, "amplitude": 0.5, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 1919, "amplitude": 0.5, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 1919, "amplitude": 0.5, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 1919, "amplitude": 0.5, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -39,55 +39,36 @@
     },
     {
         "music_note": 2,
-        "display_name": "CHLADNI_2041",
+        "display_name": "CHLADNI_2234",
         "LED_effect": 2,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 2041, "amplitude": 0.5, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 2041, "amplitude": 0.5, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 2041, "amplitude": 0.5, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 2041, "amplitude": 0.5, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 2234, "amplitude": 0.55, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 2234, "amplitude": 0.55, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 2234, "amplitude": 0.55, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 2234, "amplitude": 0.55, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
-            "image_path": "./dictionary/CHLADNI_2041.png"
+            "image_path": "./dictionary/CHLADNI_2234.png"
         }
     },
     {
         "music_note": 3,
-        "display_name": "CHLADNI_2169",
+        "display_name": "CHLADNI_2318",
         "LED_effect": 3,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 2169, "amplitude": 0.5, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 2169, "amplitude": 0.5, "phase_deg": 180 },
-                { "output": 3, "frequency_hz": 2169, "amplitude": 0.5, "phase_deg": 180 },
-                { "output": 4, "frequency_hz": 2169, "amplitude": 0.5, "phase_deg": 0 }
-            ]
-        },
-        "ui_metadata": {
-            "image_path": "./dictionary/CHLADNI_2169.png"
-        }
-    },
-    {
-        "music_note": 4,
-        "display_name": "CHLADNI_2318",
-        "LED_effect": 4,
-        "symbol_duration_ms": 5000,
-        "fade_in_ms": 1000,
-        "fade_out_ms": 1000,
-        "hardware_config": {
-            "channels": [
-                { "output": 1, "frequency_hz": 2318, "amplitude": 0.6, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 2318, "amplitude": 0.6, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 2318, "amplitude": 0.6, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 2318, "amplitude": 0.6, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 2318, "amplitude": 0.5, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 2318, "amplitude": 0.5, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 2318, "amplitude": 0.5, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 2318, "amplitude": 0.5, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -95,17 +76,17 @@
         }
     },
     {
-        "music_note": 5,
+        "music_note": 4,
         "display_name": "CHLADNI_2788",
-        "LED_effect": 5,
+        "LED_effect": 4,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
                 { "output": 1, "frequency_hz": 2788, "amplitude": 0.6, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 2788, "amplitude": 0.6, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 2788, "amplitude": 0.6, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 2788, "amplitude": 0.6, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 2788, "amplitude": 0.6, "phase_deg": 180 },
                 { "output": 4, "frequency_hz": 2788, "amplitude": 0.6, "phase_deg": 0 }
             ]
         },
@@ -114,17 +95,17 @@
         }
     },
     {
-        "music_note": 6,
+        "music_note": 5,
         "display_name": "CHLADNI_2929",
-        "LED_effect": 6,
+        "LED_effect": 5,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 2929, "amplitude": 0.6, "phase_deg": 180 },
+                { "output": 1, "frequency_hz": 2929, "amplitude": 0.6, "phase_deg": 0 },
                 { "output": 2, "frequency_hz": 2929, "amplitude": 0.6, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 2929, "amplitude": 0.6, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 2929, "amplitude": 0.6, "phase_deg": 0 },
                 { "output": 4, "frequency_hz": 2929, "amplitude": 0.6, "phase_deg": 0 }
             ]
         },
@@ -133,9 +114,9 @@
         }
     },
     {
-        "music_note": 7,
+        "music_note": 6,
         "display_name": "CHLADNI_3022",
-        "LED_effect": 7,
+        "LED_effect": 6,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
@@ -152,9 +133,9 @@
         }
     },
     {
-        "music_note": 8,
+        "music_note": 7,
         "display_name": "CHLADNI_3263",
-        "LED_effect": 8,
+        "LED_effect": 7,
         "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
@@ -168,6 +149,25 @@
         },
         "ui_metadata": {
             "image_path": "./dictionary/CHLADNI_3263.png"
+        }
+    },
+    {
+        "music_note": 8,
+        "display_name": "CHLADNI_722",
+        "LED_effect": 8,
+        "symbol_duration_ms": 5000,
+        "fade_in_ms": 1000,
+        "fade_out_ms": 1000,
+        "hardware_config": {
+            "channels": [
+                { "output": 1, "frequency_hz": 722, "amplitude": 0.3, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 722, "amplitude": 0.3, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 722, "amplitude": 0.3, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 722, "amplitude": 0.3, "phase_deg": 0 }
+            ]
+        },
+        "ui_metadata": {
+            "image_path": "./dictionary/CHLADNI_722.png"
         }
     },
     {
@@ -217,29 +217,51 @@
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 618, "amplitude": 0.1, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 618, "amplitude": 0.1, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 618, "amplitude": 0.1, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 618, "amplitude": 0.1, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 618, "amplitude": 0.15, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 618, "amplitude": 0.15, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 618, "amplitude": 0.15, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 618, "amplitude": 0.15, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
             "image_path": "./dictionary/CHLADNI_618.png"
         }
     },
+
     {
-        "music_note": 55,
-        "display_name": "SHUFFLE_1",
+        "music_note": 12,
+        "display_name": "CHLADNI_626",
         "LED_effect": 12,
-        "symbol_duration_ms": 2000 ,
+        "symbol_duration_ms": 5000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 327, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 331, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 327, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 331, "amplitude": 0.2, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 626, "amplitude": 0.2, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 626, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 3, "frequency_hz": 626, "amplitude": 0.2, "phase_deg": 180 },
+                { "output": 4, "frequency_hz": 626, "amplitude": 0.2, "phase_deg": 0 }
+            ]
+        },
+        "ui_metadata": {
+            "image_path": "./dictionary/CHLADNI_626.png"
+        }
+    },
+
+
+    {
+        "music_note": 55,
+        "display_name": "SHUFFLE_1",
+        "LED_effect": 12,
+        "symbol_duration_ms": 1000 ,
+        "fade_in_ms": 1000,
+        "fade_out_ms": 1000,
+        "hardware_config": {
+            "channels": [
+                { "output": 1, "frequency_hz": 327, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 331, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 327, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 331, "amplitude": 0.35, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -250,15 +272,15 @@
         "music_note": 99,
         "display_name": "SHUFFLE_2",
         "LED_effect": 13,
-        "symbol_duration_ms": 2000,
+        "symbol_duration_ms": 1000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 327, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 327, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 331, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 331, "amplitude": 0.2, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 502, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 500, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 500, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 502, "amplitude": 0.35, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
@@ -269,15 +291,15 @@
         "music_note": 99,
         "display_name": "SHUFFLE_3",
         "LED_effect": 12,
-        "symbol_duration_ms": 2000,
+        "symbol_duration_ms": 1000,
         "fade_in_ms": 1000,
         "fade_out_ms": 1000,
         "hardware_config": {
             "channels": [
-                { "output": 1, "frequency_hz": 327, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 2, "frequency_hz": 327, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 3, "frequency_hz": 331, "amplitude": 0.2, "phase_deg": 0 },
-                { "output": 4, "frequency_hz": 331, "amplitude": 0.2, "phase_deg": 0 }
+                { "output": 1, "frequency_hz": 327, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 2, "frequency_hz": 331, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 3, "frequency_hz": 327, "amplitude": 0.35, "phase_deg": 0 },
+                { "output": 4, "frequency_hz": 331, "amplitude": 0.35, "phase_deg": 0 }
             ]
         },
         "ui_metadata": {
