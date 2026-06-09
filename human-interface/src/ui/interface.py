@@ -750,42 +750,9 @@ class MainWindow(QWidget):
         inner_r = radius * 0.86; target = QRectF(cx-inner_r, cy-inner_r, inner_r*2, inner_r*2); clip = QPainterPath(); clip.addEllipse(target)
         p.save(); p.setClipPath(clip)
         if img: p.drawImage(target, img, self.cover_source_rect(img.width(), img.height()))
-        else: self._draw_chladni_contours_engine(p, cx, cy, inner_r)
         p.restore()
-        if not img:
-            p.setPen(QPen(QColor("#7c4a1f"), max(1, int(radius*0.012))))
-            for r in (0.32, 0.58, 0.82): p.drawEllipse(QPointF(cx, cy), radius*r, radius*r)
 
-    def _draw_chladni_contours_engine(self, p, cx, cy, radius):
-        cache_key = (self.selected_section, int(radius))
-        if cache_key in self._chladni_cache:
-            p.drawPixmap(cx - radius, cy - radius, self._chladni_cache[cache_key])
-            return
 
-        pixmap = QPixmap(int(radius * 2), int(radius * 2))
-        pixmap.fill(Qt.transparent)
-        px_p = QPainter(pixmap)
-        px_p.setRenderHint(QPainter.Antialiasing)
-
-        n = 4 + self.selected_section%3; m = 6 + (self.selected_section+1)%4; scale = math.pi/radius; step = max(3, int(radius/34))
-        px_p.setPen(QPen(QColor("#2d1a0d"), max(2, int(radius*0.018)), Qt.SolidLine, Qt.RoundCap))
-        def val(x, y): dx, dy = x-radius, y-radius; return (math.sin(n*dx*scale)*math.sin(m*dy*scale) - math.sin(m*dx*scale)*math.sin(n*dy*scale))
-        def inside(x, y): return (x-radius)**2 + (y-radius)**2 <= radius**2
-        xs, xe = 0, int(radius*2); ys, ye = 0, int(radius*2)
-        for y in range(ys, ye, step):
-            for x in range(xs, xe, step):
-                corners = [(x,y,val(x,y)), (x+step,y,val(x+step,y)), (x+step,y+step,val(x+step,y+step)), (x,y+step,val(x,y+step))]
-                crossings = []
-                for a, b in ((0,1),(1,2),(2,3),(3,0)):
-                    x1,y1,v1=corners[a]; x2,y2,v2=corners[b]
-                    if v1==0: crossings.append(QPointF(x1,y1))
-                    elif v1*v2 < 0:
-                        t = abs(v1)/(abs(v1)+abs(v2)); px,py = x1+(x2-x1)*t, y1+(y2-y1)*t
-                        if inside(px,py): crossings.append(QPointF(px,py))
-                if len(crossings)>=2: px_p.drawLine(crossings[0], crossings[1])
-        px_p.end()
-        self._chladni_cache[cache_key] = pixmap
-        p.drawPixmap(cx - radius, cy - radius, pixmap)
 
     def _draw_hands(self, p):
         if self.left_hand: self._draw_hand_skeleton(p, self.left_hand, QColor("#00eaff"), self.blue_hand_closed)
