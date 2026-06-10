@@ -24,5 +24,11 @@
         "puredata_udp": 0,
         "pico_serial": 0,
         "soundcard": 25
+    },
+    "camera_topology": {
+        "handtracking_port": "1-7",
+        "center_feed_port": "1-1",
+        "exposure_track": 204,
+        "exposure_center": 204
     }
 }

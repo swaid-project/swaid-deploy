@@ -1,6 +1,9 @@
+import os
 import sys
 import json
 import time
+import signal
+import subprocess
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QDialog
 from PySide6.QtCore import QPointF, QRectF
@@ -40,6 +43,64 @@ def scale_points(points, width, height):
     if points is None: return None
     return [QPointF(x * width, y * height) for x, y in points]
 
+from vision.center_camera import CenterCameraThread
+from vision.hardware_discovery import get_camera_device_by_usb_port, apply_v4l2_config
+from PySide6.QtCore import QTimer
+
+def load_system_config():
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as compiled PyInstaller executable (e.g. dist/SWAID_Interface/SWAID_Interface)
+        # sys.executable = swaid-deploy/human-interface/dist/SWAID_Interface/SWAID_Interface
+        # We need 4 parents to reach swaid-deploy
+        base_dir = Path(sys.executable).parent.parent.parent.parent
+    else:
+        # Running from python source in src/main.py
+        base_dir = Path(__file__).parent.parent.parent
+        
+    path = base_dir / "json_config" / "system_config.json"
+    print(f"[Main] Loading system config from: {path}")
+    if path.exists():
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[Main] Failed to parse system_config.json: {e}")
+    else:
+        print(f"[Main] system_config.json NOT FOUND at {path}")
+    return {}
+
+def _start_cam_server(device: str | None = None) -> subprocess.Popen | None:
+    server_script = Path(__file__).parent.parent / "server" / "Example.py"
+    if not server_script.exists():
+        print(f"[Main] cam server not found at {server_script}, skipping")
+        return None
+    try:
+        env = os.environ.copy()
+        if device:
+            env["CAM_DEVICE"] = device
+        proc = subprocess.Popen(
+            [sys.executable, str(server_script)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
+        )
+        print(f"[Main] Camera server started (pid={proc.pid}, device={device or 'auto'}) on port 5001")
+        return proc
+    except Exception as e:
+        print(f"[Main] Failed to start camera server: {e}")
+        return None
+
+def _stop_proc(proc: subprocess.Popen | None):
+    if proc is None:
+        return
+    try:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    except Exception:
+        pass
+
 def main():
     app = QApplication(sys.argv)
     client = ResonanceClient()
@@ -47,29 +108,43 @@ def main():
     window = MainWindow(client, catalogue)
     overlay = TestingOverlay(window)
     
-    state = {
-        "tracking_camera": default_camera_source(),
-        "center_mode": "live",
-        "center_camera": default_camera_source(),
-        "exposure_time": 204,
-        "tracker": None,
-        "settings_dialog": None,
-        "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0},
-        "camera_fallback_tried": False,
-    }
+    sys_cfg = load_system_config()
+    cam_cfg = sys_cfg.get("camera_topology", {})
+    
+    cam_server = _start_cam_server()
 
-    def on_hands_detected(left, right, closed, cursor_norm, frame_time):
-        w, h = window.width(), window.height()
-        left_px = scale_points(left, w, h)
-        right_px = scale_points(right, w, h)
-        cursor_px = QPointF(cursor_norm[0] * w, cursor_norm[1] * h) if cursor_norm else None
-        
-        window.set_tracked_hands(left_px, right_px, closed, cursor_px)
-        
+    state = {
+        "track_port_id": cam_cfg.get("handtracking_port", "/dev/video0"),
+        "center_port_id": cam_cfg.get("center_feed_port", "1-2.2"),
+        "tracking_camera": None,
+        "center_camera": None,
+        "tracker": None,
+        "center_thread": None,
+        "cam_server": cam_server,
+        "exposure_track": cam_cfg.get("exposure_track", 204),
+        "exposure_center": cam_cfg.get("exposure_center", 204),
+        "calib_tgt_idx": 0,
+        "perf": {"camera_fps": 0.0, "tracking_fps": 0.0, "live_fps": 0.0, "detection_rate": 0.0},
+    }
+    
+    window.exposure_track = state["exposure_track"]
+    window.exposure_center = state["exposure_center"]
+    window.brightness_val = max(0.0, min(1.0, (state["exposure_track"] - 20) / 480.0))
+
+    def on_hands_detected(left_pts, right_pts, is_closed, cursor, frame_time, gestures):
+        window.set_tracked_hands(scale_points(left_pts, window.width(), window.height()),
+                               scale_points(right_pts, window.width(), window.height()),
+                               is_closed, scale_points([cursor], window.width(), window.height())[0] if cursor else None,
+                               gestures)
+                               
         latency = (time.monotonic() - frame_time) * 1000
         overlay.update_stats({
             "camera_to_ui_ms": latency,
-            "hands_visible": (1 if left else 0) + (1 if right else 0),
+            "hands_visible": (1 if left_pts else 0) + (1 if right_pts else 0),
+            "sys_server_ok": getattr(window, "sys_server_ok", False),
+            "sys_plate_ok": getattr(window, "sys_plate_ok", False),
+            "sys_led_ok": getattr(window, "sys_led_ok", False),
+            "sys_music_ok": getattr(window, "sys_music_ok", False),
             **state["perf"]
         })
 
@@ -77,84 +152,107 @@ def main():
         state["perf"].update(metrics)
         overlay.update_stats(state["perf"])
 
-    def on_camera_error(failed_index, msg):
-        print(f"[Main] Camera {failed_index} error: {msg}")
-        # Only consider real capture devices (sysfs index 0) — skip metadata/control streams
-        all_sources = [
-            str(d) for d in sorted(Path("/dev").glob("video*"), key=lambda p: int(p.name[5:] or 0))
-            if _is_capture_device(d)
-        ] or ["/dev/video0"]
-        remaining = [s for s in all_sources if s != str(failed_index) and s != failed_index]
-        if remaining and not state["camera_fallback_tried"]:
-            state["camera_fallback_tried"] = True
-            print(f"[Main] Auto-switching to fallback camera {remaining[0]}")
-            start_tracker(remaining[0], _from_fallback=True)
-        else:
-            state["camera_fallback_tried"] = False
-            window.set_camera_error("CAMERA OFFLINE — Hand tracking unavailable")
+    def update_center_preview(qimg, source_idx):
+        if getattr(window, "camera_menu_open", False):
+            if state["calib_tgt_idx"] == source_idx:
+                window.set_center_live_image(qimg)
+            return
+        # When same camera for both roles, tracker (0) provides the center feed
+        same_device = (state["tracking_camera"] and
+                       state["tracking_camera"] == state["center_camera"])
+        if source_idx == 1 or (source_idx == 0 and same_device):
+            window.set_center_live_image(qimg)
 
-    def start_tracker(camera_index, _from_fallback=False):
-        if not _from_fallback:
-            state["camera_fallback_tried"] = False
-        if state["tracker"]:
-            state["tracker"].stop()
-            state["tracker"].wait(1000)
-
-        window.set_camera_error("")
+    def start_tracker(camera_index):
         tracker = HandTrackingThread(camera_index)
         tracker.hands_detected.connect(on_hands_detected)
-        tracker.camera_frame_ready.connect(window.set_center_live_image)
+        tracker.camera_frame_ready.connect(lambda img: update_center_preview(img, 0))
         tracker.metrics_updated.connect(on_metrics_updated)
-        tracker.camera_error.connect(lambda msg: on_camera_error(camera_index, msg))
         tracker.start()
         state["tracker"] = tracker
-        state["tracking_camera"] = camera_index
+        window.set_camera_error("")
+        # Restart cam server so its stream follows the tracking camera
+        _stop_proc(state["cam_server"])
+        state["cam_server"] = _start_cam_server(camera_index)
 
-    def open_settings():
-        if state["settings_dialog"] and state["settings_dialog"].isVisible():
-            state["settings_dialog"].close()
-            return
+    def start_center_camera(camera_index):
+        cthread = CenterCameraThread(camera_index)
+        cthread.camera_frame_ready.connect(lambda img: update_center_preview(img, 1))
+        cthread.start()
+        state["center_thread"] = cthread
 
-        def on_accepted():
-            vals = dlg.values()
-            if vals["tracking_camera"] != state["tracking_camera"]:
-                start_tracker(vals["tracking_camera"])
-            state["center_camera"] = vals["center_camera"]
-            state["center_mode"] = vals["center_mode"]
-            if vals["exposure_time"] != state["exposure_time"]:
-                state["exposure_time"] = vals["exposure_time"]
-                if state["tracker"]:
-                    state["tracker"].set_exposure(vals["exposure_time"])
+    def heartbeat_check():
+        # Re-read config each tick so Flask server camera changes are picked up
+        live_cfg = load_system_config().get("camera_topology", {})
+        state["track_port_id"]  = live_cfg.get("handtracking_port", state["track_port_id"])
+        state["center_port_id"] = live_cfg.get("center_feed_port",  state["center_port_id"])
 
-        dlg = CameraSettingsDialog(
-            state["tracking_camera"], state["center_mode"], state["center_camera"],
-            exposure_time=state["exposure_time"],
-            standby_callback=window.trigger_standby_test,
-            diag_callback=lambda: window.testing_toggle.emit(),
-            diag_active=overlay.isVisible(),
-            hb_callback=lambda enabled: setattr(window, "_heartbeat_enabled", enabled),
-            hb_active=getattr(window, "_heartbeat_enabled", True),
-            hints_callback=lambda: setattr(window, "_hints_visible", not getattr(window, "_hints_visible", True)) or window.update(),
-            hints_active=getattr(window, "_hints_visible", True),
-            parent=window
-        )
-        dlg.accepted.connect(on_accepted)
-        dlg.finished.connect(lambda _: state.update({"settings_dialog": None}))
-        state["settings_dialog"] = dlg
-        dlg.show()
+        track_dev = get_camera_device_by_usb_port(state["track_port_id"])
+        center_dev = get_camera_device_by_usb_port(state["center_port_id"])
+        
+        print(f"[DEBUG Heartbeat] track_port='{state['track_port_id']}' resolved_to={track_dev}")
+        print(f"[DEBUG Heartbeat] center_port='{state['center_port_id']}' resolved_to={center_dev}")
+        
+        if track_dev != state["tracking_camera"]:
+            print(f"[Main] Tracking camera changed: {state['tracking_camera']} -> {track_dev}")
+            state["tracking_camera"] = track_dev
+            if state["tracker"]:
+                state["tracker"].stop()
+                state["tracker"].wait(1000)
+                state["tracker"] = None
+            if track_dev:
+                apply_v4l2_config(track_dev, state["exposure_track"])
+                start_tracker(track_dev)
+            else:
+                window.set_camera_error("CAMERA OFFLINE — Hand tracking unavailable")
+                
+        if center_dev != state["center_camera"]:
+            print(f"[Main] Center camera changed: {state['center_camera']} -> {center_dev}")
+            state["center_camera"] = center_dev
+            if state["center_thread"]:
+                state["center_thread"].stop()
+                state["center_thread"].wait(1000)
+                state["center_thread"] = None
+            if center_dev and center_dev != state["tracking_camera"]:
+                # Different device — open dedicated thread
+                apply_v4l2_config(center_dev, state["exposure_center"])
+                start_center_camera(center_dev)
+            # Same device as tracker — update_center_preview routes tracker frames instead
 
-    window.settings_requested.connect(open_settings)
-    window.testing_toggle.connect(lambda: overlay.setVisible(not overlay.isVisible()))
+    hb_timer = QTimer()
+    hb_timer.timeout.connect(heartbeat_check)
+    hb_timer.start(2000)
+    heartbeat_check() # Initial discovery
+
+    def on_exposure_changed(val):
+        if state["calib_tgt_idx"] == 0:
+            state["exposure_track"] = val
+            if state["tracking_camera"]: apply_v4l2_config(state["tracking_camera"], val)
+            if state["tracker"]: state["tracker"].set_exposure(val)
+        else:
+            state["exposure_center"] = val
+            if state["center_camera"]: apply_v4l2_config(state["center_camera"], val)
+
+    def on_calib_tgt_changed(idx_str):
+        state["calib_tgt_idx"] = int(idx_str)
+
+    window.exposure_changed.connect(on_exposure_changed)
+    window.center_camera_changed.connect(on_calib_tgt_changed)
+    window.testing_toggle.connect(overlay.toggle_visibility)
     
-    start_tracker(state["tracking_camera"])
     window.showFullScreen()
     
     try:
         exit_code = app.exec()
     finally:
+        hb_timer.stop()
         if state["tracker"]:
             state["tracker"].stop()
             state["tracker"].wait(1000)
+        if state["center_thread"]:
+            state["center_thread"].stop()
+            state["center_thread"].wait(1000)
+        _stop_proc(state["cam_server"])
         client.stop()
         
     sys.exit(exit_code)

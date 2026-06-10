@@ -4,13 +4,18 @@ import sys
 
 def main():
     # Use the first argument as device, default to /dev/video2
-    device = sys.argv[1] if len(sys.argv) > 1 else "/dev/video2"
+    device = sys.argv[1] if len(sys.argv) > 1 else "/dev/video0"
     
     print(f"Connecting to {device}...")
     
     # Initialize basic camera settings
-    subprocess.run(["v4l2-ctl", "-d", device, "-c", "auto_exposure=1"], check=False, stderr=subprocess.DEVNULL)
-    subprocess.run(["v4l2-ctl", "-d", device, "-c", "exposure_dynamic_framerate=0"], check=False, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.run(["v4l2-ctl", "-d", device, "-c", "auto_exposure=1"], check=False, stderr=subprocess.DEVNULL)
+        subprocess.run(["v4l2-ctl", "-d", device, "-c", "exposure_dynamic_framerate=0"], check=False, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        print("ERROR: 'v4l2-ctl' is not installed on your system.")
+        print("Please install it by running: sudo apt install v4l-utils")
+        print("Camera tuner will continue, but exposure controls will NOT work.")
     
     # Try opening the camera using V4L2
     cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
@@ -21,13 +26,16 @@ def main():
 
     # Callbacks for the Trackbars
     def update_exposure(val):
-        subprocess.run(["v4l2-ctl", "-d", device, "-c", f"exposure_time_absolute={val}"], check=False, stderr=subprocess.DEVNULL)
+        try: subprocess.run(["v4l2-ctl", "-d", device, "-c", f"exposure_time_absolute={val}"], check=False, stderr=subprocess.DEVNULL)
+        except FileNotFoundError: pass
 
     def update_contrast(val):
-        subprocess.run(["v4l2-ctl", "-d", device, "-c", f"contrast={val}"], check=False, stderr=subprocess.DEVNULL)
+        try: subprocess.run(["v4l2-ctl", "-d", device, "-c", f"contrast={val}"], check=False, stderr=subprocess.DEVNULL)
+        except FileNotFoundError: pass
         
     def update_brightness(val):
-        subprocess.run(["v4l2-ctl", "-d", device, "-c", f"brightness={val}"], check=False, stderr=subprocess.DEVNULL)
+        try: subprocess.run(["v4l2-ctl", "-d", device, "-c", f"brightness={val}"], check=False, stderr=subprocess.DEVNULL)
+        except FileNotFoundError: pass
 
     # Create the window
     window_name = f"Camera Tuner - {device}"

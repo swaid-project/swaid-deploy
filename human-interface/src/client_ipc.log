@@ -42,3 +42,5 @@
 2026-06-08 11:53:54,094 - DEBUG - TX -> {"trace_id": "req-12e23459", "message_type": "trigger", "music_note": 0}
 2026-06-08 11:54:05,270 - DEBUG - TX -> {"trace_id": "req-aab1fde5", "message_type": "trigger", "music_note": 2}
 2026-06-08 11:54:09,312 - DEBUG - TX -> {"trace_id": "req-306b031a", "message_type": "trigger", "music_note": 4}
+2026-06-09 14:17:14,382 - INFO - ResonanceClient initialized. Connecting to ipc:///tmp/swaid.sock
+2026-06-09 14:17:15,972 - DEBUG - TX -> {"trace_id": "req-c205a915", "message_type": "trigger", "music_note": 0}

@@ -24,7 +24,7 @@ NOTE_MAP = {
     "C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
     "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
 }
-IDLE_TIMEOUT_S = 5 * 60
+IDLE_TIMEOUT_S = 1 * 60
 CYCLE_INTERVAL_S = 60
 _STANDBY_TIMEOUT_S = 5 * 60
 _STANDBY_EXIT_HOLD_S = 5.0
@@ -45,6 +45,9 @@ class MainWindow(QWidget):
     settings_requested = Signal()
     testing_toggle = Signal()
     heartbeat_toggled = Signal(bool)
+    tracking_camera_changed = Signal(str)
+    center_camera_changed = Signal(str)
+    exposure_changed = Signal(int)
 
     def __init__(self, client, catalogue):
         super().__init__()
@@ -154,14 +157,84 @@ class MainWindow(QWidget):
         self._shuffle_dwell_start = None
         self._shuffle_locked = False
         self._chladni_cache = {}
+        self._center_live_pixmap = None
+        
+        self._gesture_dwell_state = {
+            "steeple": {"active": False, "start": 0.0, "armed": True},
+            "peace": {"active": False, "start": 0.0, "armed": True},
+            "ok_sign": {"active": False, "start": 0.0, "armed": True}
+        }
+        
+        try:
+            from vision.hand_tracking import discover_camera_choices
+            self.camera_choices = discover_camera_choices()
+        except ImportError:
+            self.camera_choices = []
+        if not self.camera_choices: self.camera_choices = [("Default", "/dev/video0")]
+        
+        self.calib_tgt_idx = 0
+        self.exposure_track = 204
+        self.exposure_center = 204
+        self.brightness_val = max(0.0, min(1.0, (204 - 20) / 480.0))
+        self._cam_menu_dwell_start = None
+        self._cam_menu_hovered_btn = -1
 
     def _init_ui_components(self):
         self._active_warning_msg = ""
         self._active_warning_critical = False
+        self._qr_pixmap = self._make_server_qr(140)
+
+    @staticmethod
+    def _get_local_ip() -> str:
+        import socket
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    def _make_server_qr(self, size: int):
+        try:
+            import qrcode
+            from PIL import Image as PilImage
+            url = f"http://{self._get_local_ip()}:5001"
+            qr = qrcode.QRCode(border=1, error_correction=qrcode.constants.ERROR_CORRECT_L)
+            qr.add_data(url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="white", back_color="#0d0f14").convert("RGBA")
+            img = img.resize((size, size), PilImage.NEAREST)
+            arr = np.array(img, dtype=np.uint8)
+            h, w = arr.shape[:2]
+            qimg = QImage(arr.data, w, h, w * 4, QImage.Format_RGBA8888).copy()
+            return QPixmap.fromImage(qimg)
+        except Exception:
+            return None
 
     def _preload_status_icons(self):
-        icon_names = ["server", "fist", "openhand"]
+        icon_names = ["server", "fist", "openhand", "ippe-vibrate"]
         colors = {"green": "#00E800", "red": "#FF0038", "white": "#FFFFFF"}
+        bri_path = get_resource_path("assets/brightness.svg")
+        self._bri_icon = None
+        if bri_path.exists():
+            try:
+                with open(bri_path, 'r', encoding='utf-8') as f:
+                    svg_content = f.read()
+                # The SVG uses #0F0F0F for the icon paths
+                mod_svg = svg_content.replace("#0F0F0F", "#FFFFFF")
+                pixmap = QPixmap()
+                pixmap.loadFromData(mod_svg.encode('utf-8'))
+                if not pixmap.isNull():
+                    self._bri_icon = pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    print(f"[UI] Successfully loaded and colorized brightness.svg from {bri_path}")
+                else:
+                    print(f"[UI] Failed to load brightness.svg: QPixmap is null after parsing {bri_path}")
+            except Exception as e:
+                print(f"[UI] Exception loading brightness.svg: {e}")
+        else:
+            print(f"[UI] Could not find brightness.svg at {bri_path}")
         for name in icon_names:
             self._status_icons[name] = {}
             path = get_resource_path(f"assets/{name}.svg")
@@ -328,7 +401,8 @@ class MainWindow(QWidget):
         self.update()
 
     def update_dwell_selection(self):
-        if self._idle_active or self.is_input_locked: 
+        is_menu_lock = getattr(self, "diagnostics_open", False) or getattr(self, "camera_menu_open", False)
+        if self._idle_active or self.is_input_locked or is_menu_lock: 
             self.dwell_progress = 0.0
             return
         
@@ -379,12 +453,12 @@ class MainWindow(QWidget):
         if not shuffle_steps:
             return
 
-        for i, step in enumerate(shuffle_steps):
-            note = step.get("music_note")
-            if note is not None:
-                QTimer.singleShot(i * _SHUFFLE_STEP_DELAY_MS, lambda n=note: self.client.trigger(n))
+        total_lockout = 0
+        for step in shuffle_steps:
+            total_lockout += step.get("fade_in_ms", 100) + step.get("symbol_duration_ms", 500) + step.get("fade_out_ms", 100)
 
-        total_lockout = _SHUFFLE_STEP_DELAY_MS * len(shuffle_steps)
+        self.client.shuffle()
+
         self.is_input_locked = True
         self._shuffle_locked = True
         self._lockout_timer.start(total_lockout)
@@ -464,17 +538,14 @@ class MainWindow(QWidget):
         self._draw_ambient_warning(p, w, h)
         
         base_r = min(w, h); sel_r = base_r * self.selector_radius_scale
-        center_r = base_r * self.center_plate_radius_scale; preview_r = max(150, base_r * 0.15)
-        
+        center_r = base_r * self.center_plate_radius_scale
+
         self._draw_actuation_ripple(p, cx, cy, sel_r)
-        
+
         self._draw_selector(p, cx, cy, sel_r)
         self._draw_center_plate(p, cx, cy, center_r)
         self._draw_dwell_ring(p, cx, cy, sel_r)
-        
-        px, py = w - preview_r - 20, h - preview_r - 20
-        self._draw_preview_disc(p, px, py, preview_r)
-        
+
         self._draw_hands(p)
         
         if self._standby_active: self._draw_standby_overlay(p, cx, cy, center_r)
@@ -488,12 +559,89 @@ class MainWindow(QWidget):
 
         if self._logo:
             lh = 100; lw = int(lh * self._logo.width() / self._logo.height())
-            p.drawPixmap(16, h - lh - 16, lw, lh, self._logo)
+            logo_y = h - lh - 16
+            p.drawPixmap(16, logo_y, lw, lh, self._logo)
+            if self._qr_pixmap:
+                qr_size = 140
+                p.drawPixmap(16, logo_y - qr_size - 6, qr_size, qr_size, self._qr_pixmap)
+        elif self._qr_pixmap:
+            qr_size = 140
+            p.drawPixmap(16, h - qr_size - 16, qr_size, qr_size, self._qr_pixmap)
         
         if self._hints_visible: self._draw_hints(p, w, h)
+        
+        self._draw_camera_menu(p, w, h)
+        self._draw_image_button(p, w - 104, 16)
+        self._draw_shuffle_button(p, w - 104, 96)
         self._draw_heartbeat_indicator(p, w)
-        self._draw_shuffle_button(p, w - 192, 16)
-        self._draw_image_button(p, w - 104, 152)
+
+    def _draw_camera_menu(self, p, w, h):
+        if not getattr(self, "camera_menu_open", False): return
+        
+        from PySide6.QtGui import QRegion
+        base_r = min(w, h); center_r = base_r * self.center_plate_radius_scale
+        cx, cy = w/2, h/2
+        
+        region = QRegion(0, 0, int(w), int(h))
+        hole = QRegion(int(cx - center_r), int(cy - center_r), int(center_r*2), int(center_r*2), QRegion.Ellipse)
+        p.setClipRegion(region.subtracted(hole))
+        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
+        p.setClipping(False)
+        
+        # Right Side Menu (Only 1 button now)
+        menu_w = 350
+        rx, ry = w - menu_w - 40, (h - 100) // 2
+        
+        opts = [
+            ("Calibrate Target", "Handtracking Camera" if self.calib_tgt_idx == 0 else "Center Feed Camera")
+        ]
+        
+        for i, (title, val) in enumerate(opts):
+            by = ry + i * 120
+            rect = QRectF(rx, by, menu_w, 100)
+            is_hov = rect.contains(self.mouse_pos) if self.mouse_pos else False
+            
+            p.setBrush(QColor(40, 40, 50, 240) if not is_hov else QColor(70, 70, 90, 240))
+            p.setPen(QPen(QColor("#00d9e8") if is_hov else Qt.white, 2))
+            p.drawRoundedRect(rect, 10, 10)
+            
+            p.setFont(QFont("Arial", 16, QFont.Bold))
+            p.setPen(QColor("#a0a0a0"))
+            p.drawText(QRectF(rx + 20, by + 10, menu_w - 40, 30), Qt.AlignLeft, title)
+            
+            p.setFont(QFont("Arial", 22, QFont.Bold))
+            p.setPen(Qt.white)
+            p.drawText(QRectF(rx + 20, by + 40, menu_w - 40, 50), Qt.AlignLeft, val)
+            
+            # Draw progress bar if dwelling
+            if is_hov and self._cam_menu_hovered_btn == i and self._cam_menu_dwell_start:
+                now = time.monotonic()
+                prog = min(1.0, (now - self._cam_menu_dwell_start) / 1.0)
+                if prog > 0:
+                    p.setBrush(QColor("#00d9e8"))
+                    p.setPen(Qt.NoPen)
+                    p.drawRoundedRect(QRectF(rx, by + 90, menu_w * prog, 10), 5, 5)
+            
+        # Left Side Slider
+        sx, sy = 80, (h - 400) // 2
+        p.setPen(QPen(QColor(40, 40, 50, 240), 10, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(sx, sy, sx, sy + 400)
+        
+        # Exposure value label above slider
+        current_exp = int(20 + self.brightness_val * 480)
+        p.setFont(QFont("Arial", 18, QFont.Bold))
+        p.setPen(Qt.white)
+        p.drawText(QRectF(sx - 50, sy - 50, 100, 40), Qt.AlignCenter, str(current_exp))
+        
+        # Icon below the slide bar
+        if getattr(self, "_bri_icon", None):
+            p.drawPixmap(sx - 24, sy + 430, 48, 48, self._bri_icon)
+        
+        thumb_y = sy + int((1.0 - self.brightness_val) * 400)
+        
+        p.setBrush(QColor("#00d9e8"))
+        p.setPen(Qt.white)
+        p.drawEllipse(QPointF(sx, thumb_y), 30, 30)
 
     def _draw_wave(self, p, x0, y0, length, channels=None):
         wave_count = 4; spacing = 44; speed = self.t * 4.0;
@@ -576,9 +724,11 @@ class MainWindow(QWidget):
 
     def _draw_selector(self, p, cx, cy, radius):
         glow_a = int(90 + 165 * self.wave_amplitude); colors = self.image_colors if self.using_image_mode() else self.section_colors
+        is_menu_lock = getattr(self, "diagnostics_open", False) or getattr(self, "camera_menu_open", False)
+        actual_locked = self.is_input_locked or is_menu_lock
         
         # Draw glow if not locked
-        if not self.is_input_locked:
+        if not actual_locked:
             gc = QColor(colors[self.selected_section]); gc.setAlpha(glow_a)
             grad = QRadialGradient(QPointF(cx, cy), radius + 110); grad.setColorAt(0.40, QColor(0,0,0,0)); grad.setColorAt(0.70, gc); grad.setColorAt(1.0, QColor(0,0,0,0))
             p.setBrush(grad); p.setPen(Qt.NoPen); p.drawEllipse(QPointF(cx, cy), radius + 110, radius + 110)
@@ -586,12 +736,12 @@ class MainWindow(QWidget):
         span = 60 * 16
         for i, color in enumerate(colors):
             is_sel = (i == self.selected_section)
-            is_hov = (i == self.hover_section and not self.is_input_locked)
+            is_hov = (i == self.hover_section and not actual_locked)
             or_ = radius + 20 if (is_sel or is_hov) else radius
             rect = QRectF(cx-or_, cy-or_, or_*2, or_*2)
             
             fill = QColor(color)
-            if self.is_input_locked:
+            if actual_locked:
                 pulse_alpha = 110 + int(70 * math.sin(time.monotonic() * 6.0 - i * 1.047))
                 fill.setAlpha(pulse_alpha)
             else:
@@ -602,10 +752,11 @@ class MainWindow(QWidget):
             
         p.setBrush(QColor("#1b1b1d")); p.setPen(QPen(QColor("#303035"), 4)); p.drawEllipse(QPointF(cx, cy), radius*0.72, radius*0.72)
         
-        if self.is_input_locked:
-            p.setPen(QColor("#ff0038"))
+        if actual_locked:
+            p.setPen(QColor("#ff0038") if self.is_input_locked else QColor("#00d9e8"))
             p.setFont(QFont("Arial", 16, QFont.Bold))
-            p.drawText(QRectF(cx-100, cy-20, 200, 40), Qt.AlignCenter, "SYSTEM BUSY")
+            text = "SYSTEM BUSY" if self.is_input_locked else "MENU OPEN"
+            p.drawText(QRectF(cx-100, cy-20, 200, 40), Qt.AlignCenter, text)
         else:
             labels = self.image_labels if self.using_image_mode() else self.sector_labels
             p.setFont(QFont("Arial", 34, QFont.Bold))
@@ -622,54 +773,11 @@ class MainWindow(QWidget):
     def _draw_center_plate(self, p, cx, cy, radius):
         inner_r = radius * 0.86; target = QRectF(cx-inner_r, cy-inner_r, inner_r*2, inner_r*2); clip = QPainterPath(); clip.addEllipse(target)
         p.save(); p.setClipPath(clip)
-        if self.center_live_image: p.drawImage(target, self.center_live_image, self.cover_source_rect(self.center_live_image.width(), self.center_live_image.height()))
+        if self._center_live_pixmap: p.drawPixmap(target.toRect(), self._center_live_pixmap)
+        elif self.center_live_image: p.drawImage(target, self.center_live_image, self.cover_source_rect(self.center_live_image.width(), self.center_live_image.height()))
         else: p.fillRect(target, QColor("#0a0b0e"))
         p.restore()
 
-    def _draw_preview_disc(self, p, cx, cy, radius):
-        id_ = self._id_for_note(self._idle_note if self._idle_active else self._selected_note_id); img = self._symbol_images.get(id_)
-        p.setBrush(QColor("#bf8a47")); p.setPen(QPen(QColor("#f3cf8d"), max(2, int(radius*0.03)))); p.drawEllipse(QPointF(cx, cy), radius, radius)
-        p.setBrush(QColor(245,218,165,58)); p.setPen(QPen(QColor("#6b3f1d"), max(1, int(radius*0.015)))); p.drawEllipse(QPointF(cx, cy), radius*0.9, radius*0.9)
-        if self._shuffle_locked: return
-        inner_r = radius * 0.86; target = QRectF(cx-inner_r, cy-inner_r, inner_r*2, inner_r*2); clip = QPainterPath(); clip.addEllipse(target)
-        p.save(); p.setClipPath(clip)
-        if img: p.drawImage(target, img, self.cover_source_rect(img.width(), img.height()))
-        else: self._draw_chladni_contours_engine(p, cx, cy, inner_r)
-        p.restore()
-        if not img:
-            p.setPen(QPen(QColor("#7c4a1f"), max(1, int(radius*0.012))))
-            for r in (0.32, 0.58, 0.82): p.drawEllipse(QPointF(cx, cy), radius*r, radius*r)
-
-    def _draw_chladni_contours_engine(self, p, cx, cy, radius):
-        cache_key = (self.selected_section, int(radius))
-        if cache_key in self._chladni_cache:
-            p.drawPixmap(cx - radius, cy - radius, self._chladni_cache[cache_key])
-            return
-
-        pixmap = QPixmap(int(radius * 2), int(radius * 2))
-        pixmap.fill(Qt.transparent)
-        px_p = QPainter(pixmap)
-        px_p.setRenderHint(QPainter.Antialiasing)
-
-        n = 4 + self.selected_section%3; m = 6 + (self.selected_section+1)%4; scale = math.pi/radius; step = max(3, int(radius/34))
-        px_p.setPen(QPen(QColor("#2d1a0d"), max(2, int(radius*0.018)), Qt.SolidLine, Qt.RoundCap))
-        def val(x, y): dx, dy = x-radius, y-radius; return (math.sin(n*dx*scale)*math.sin(m*dy*scale) - math.sin(m*dx*scale)*math.sin(n*dy*scale))
-        def inside(x, y): return (x-radius)**2 + (y-radius)**2 <= radius**2
-        xs, xe = 0, int(radius*2); ys, ye = 0, int(radius*2)
-        for y in range(ys, ye, step):
-            for x in range(xs, xe, step):
-                corners = [(x,y,val(x,y)), (x+step,y,val(x+step,y)), (x+step,y+step,val(x+step,y+step)), (x,y+step,val(x,y+step))]
-                crossings = []
-                for a, b in ((0,1),(1,2),(2,3),(3,0)):
-                    x1,y1,v1=corners[a]; x2,y2,v2=corners[b]
-                    if v1==0: crossings.append(QPointF(x1,y1))
-                    elif v1*v2 < 0:
-                        t = abs(v1)/(abs(v1)+abs(v2)); px,py = x1+(x2-x1)*t, y1+(y2-y1)*t
-                        if inside(px,py): crossings.append(QPointF(px,py))
-                if len(crossings)>=2: px_p.drawLine(crossings[0], crossings[1])
-        px_p.end()
-        self._chladni_cache[cache_key] = pixmap
-        p.drawPixmap(cx - radius, cy - radius, pixmap)
 
     def _draw_hands(self, p):
         if self.left_hand: self._draw_hand_skeleton(p, self.left_hand, QColor("#00eaff"), self.blue_hand_closed)
@@ -771,7 +879,7 @@ class MainWindow(QWidget):
     def _draw_heartbeat_indicator(self, p, w):
         if not self._heartbeat_enabled: return
         
-        start_y = 96
+        start_y = 176
         start_x = w - 76
         
         is_ok = self.sys_server_ok
@@ -788,11 +896,14 @@ class MainWindow(QWidget):
         p.setOpacity(1.0)
 
     def _draw_shuffle_button(self, p, x, y):
-        self._shuffle_btn_rect = QRectF(x, y, 176, 128)
-        base = QColor("#2a1e4a") if not self._shuffle_btn_hover else QColor("#3d2e6e")
+        self._shuffle_btn_rect = QRectF(x, y, 88, 64)
+        base = QColor("#2a1e4a")
+        if self._shuffle_btn_hover: base = base.lighter(132)
         p.setBrush(base); p.setPen(QPen(QColor("#9b59f5"), 3)); p.drawRoundedRect(self._shuffle_btn_rect, 8, 8)
-        p.setPen(QColor("#d4b8ff")); p.setFont(QFont("Arial", 18, QFont.Bold))
-        p.drawText(self._shuffle_btn_rect, Qt.AlignCenter, "⟳  SHUFFLE")
+        
+        icon = self._status_icons.get("ippe-vibrate", {}).get("white")
+        if icon:
+            p.drawPixmap(int(x + 28), int(y + 16), 32, 32, icon)
 
     def _draw_image_button(self, p, x, y):
         self.image_btn_rect = QRectF(x, y, 88, 64); base = QColor("#1d8dbf") if self.using_image_mode() else QColor("#24252b")
@@ -804,7 +915,25 @@ class MainWindow(QWidget):
         for i in range(4): p.drawRoundedRect(QRectF(bx-22+i*11, self.image_btn_rect.top()+16, 10, 24), 5, 5)
         p.drawLine(QPointF(bx-8, by+20), QPointF(bx-18, by+10)); p.drawLine(QPointF(bx+8, by+20), QPointF(bx+18, by+10))
 
-    def set_tracked_hands(self, left, right, closed, cursor):
+    def _trigger_gesture_action(self, action):
+        diag_open = getattr(self, "diagnostics_open", False)
+        cam_open = getattr(self, "camera_menu_open", False)
+
+        if action == "steeple":
+            if self.is_input_locked or diag_open or cam_open: return
+            if not self._shuffle_locked:
+                self.trigger_shuffle()
+                self._shuffle_locked = True
+        elif action == "peace":
+            if self.is_input_locked or diag_open: return
+            self.camera_menu_open = not cam_open
+            # self.settings_requested.emit() # Replaced by native Phase 5 UI
+        elif action == "ok_sign":
+            if self.is_input_locked or cam_open: return
+            self.diagnostics_open = not diag_open
+            self.testing_toggle.emit()
+
+    def set_tracked_hands(self, left, right, closed, cursor, gestures=None):
         now = time.monotonic()
         if left or right:
             self._last_hand_at = now
@@ -837,19 +966,95 @@ class MainWindow(QWidget):
                 self._shuffle_dwell_start = None
         else:
             self._shuffle_dwell_start = None
+
+        if getattr(self, "camera_menu_open", False):
+            # Left slider logic
+            w, h = self.width(), self.height()
+            sy = (h - 400) // 2
+            if self.left_hand:
+                lx = self.left_hand[8].x()
+                ly = self.left_hand[8].y()
+                if lx < 300: # Hand is on the left third of the screen
+                    val = 1.0 - ((ly - sy) / 400.0)
+                    val = max(0.0, min(1.0, val))
+                    if abs(val - self.brightness_val) > 0.02:
+                        self.brightness_val = val
+                        exp = int(20 + val * 480)
+                        if self.calib_tgt_idx == 0: self.exposure_track = exp
+                        else: self.exposure_center = exp
+                        self.exposure_changed.emit(exp)
+            
+            # Right menu logic
+            if self.mouse_pos:
+                menu_w = 350
+                rx = w - menu_w - 40
+                ry = (h - 100) // 2
+                
+                hovered_now = -1
+                if QRectF(rx, ry, menu_w, 100).contains(self.mouse_pos):
+                    hovered_now = 0
+                        
+                if hovered_now != -1:
+                    if self._cam_menu_hovered_btn != hovered_now:
+                        self._cam_menu_hovered_btn = hovered_now
+                        self._cam_menu_dwell_start = now
+                    elif self._cam_menu_dwell_start and (now - self._cam_menu_dwell_start >= 1.0):
+                        # Toggle Calibration Target
+                        self.calib_tgt_idx = 1 - self.calib_tgt_idx
+                        # Snap slider to new target
+                        if self.calib_tgt_idx == 0:
+                            self.brightness_val = max(0.0, min(1.0, (self.exposure_track - 20) / 480.0))
+                        else:
+                            self.brightness_val = max(0.0, min(1.0, (self.exposure_center - 20) / 480.0))
+                        
+                        self.center_camera_changed.emit(str(self.calib_tgt_idx)) # Tells main.py which feed to show
+                        self._cam_menu_dwell_start = now + 0.5 # Delay
+                else:
+                    self._cam_menu_hovered_btn = -1
+                    self._cam_menu_dwell_start = None
+
+        if gestures:
+            for g_name, g_val in gestures.items():
+                st = self._gesture_dwell_state[g_name]
+                if g_val:
+                    if st["armed"]:
+                        if not st["active"]:
+                            st["active"] = True
+                            st["start"] = now
+                        elif now - st["start"] >= 0.8:
+                            st["armed"] = False
+                            st["active"] = False
+                            self._trigger_gesture_action(g_name)
+                else:
+                    st["active"] = False
+                    st["armed"] = True
+
         self.update()
 
-    def set_center_live_image(self, img): self.center_live_image = img; self.update()
+    def set_center_live_image(self, img):
+        self.center_live_image = img
+        if img is not None:
+            inner_r = min(self.width(), self.height()) * self.center_plate_radius_scale * 0.86
+            size = max(2, int(inner_r * 2))
+            pix = QPixmap.fromImage(img)
+            iw, ih = img.width(), img.height()
+            if iw > 0 and ih > 0:
+                scale = max(size / iw, size / ih)
+                sw, sh = int(iw * scale), int(ih * scale)
+                sx = (sw - size) // 2
+                sy = (sh - size) // 2
+                self._center_live_pixmap = pix.scaled(sw, sh, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).copy(sx, sy, size, size)
+            else:
+                self._center_live_pixmap = None
+        else:
+            self._center_live_pixmap = None
+        self.update()
     def keyPressEvent(self, e):
-        if e.key()==Qt.Key_I: self.testing_toggle.emit()
-        elif e.key()==Qt.Key_M: self.settings_requested.emit()
-        elif e.key()==Qt.Key_S: self.trigger_shuffle()
+        if e.key()==Qt.Key_S: self.trigger_shuffle()
         elif e.key()==Qt.Key_H: self._heartbeat_enabled = not self._heartbeat_enabled; self.heartbeat_toggled.emit(self._heartbeat_enabled)
         elif e.key()==Qt.Key_B: self._hints_visible = not self._hints_visible
-        elif e.key()==Qt.Key_F: self.blue_hand_closed = True; self.sharp_mode_until = time.monotonic()+86400; self._record_interaction()
         super().keyPressEvent(e)
     def keyReleaseEvent(self, e):
-        if e.key()==Qt.Key_F: self.blue_hand_closed = False; self.sharp_mode_until = 0.0; self.update()
         super().keyReleaseEvent(e)
     def mouseMoveEvent(self, e): self.mouse_pos = QPointF(e.position()); self.hover_section = self.section_at(self.mouse_pos); self.image_btn_hover = self.image_btn_rect.contains(self.mouse_pos); self._shuffle_btn_hover = self._shuffle_btn_rect.contains(self.mouse_pos); self._record_interaction(); self.update()
     def mousePressEvent(self, e):
@@ -859,4 +1064,5 @@ class MainWindow(QWidget):
     def leaveEvent(self, e): self.hover_section = -1; self.image_btn_hover = False; self._shuffle_btn_hover = False; self.update(); super().leaveEvent(e)
     def resizeEvent(self, e):
         self._chladni_cache.clear()
+        self._center_live_pixmap = None
         super().resizeEvent(e)
